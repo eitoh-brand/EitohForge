@@ -27,6 +27,7 @@ This README is intentionally **long-form for PyPI** and covers features, module 
 - [Feature Enable/Disable Strategy](#feature-enabledisable-strategy)
 - [Multi-Port and Multi-Instance Patterns](#multi-port-and-multi-instance-patterns)
 - [Database Selection and Connectivity](#database-selection-and-connectivity)
+- [Multi-Environment Usage (local/dev/staging/prod)](#multi-environment-usage-localdevstagingprod)
 - [SDK Usage (complete)](#sdk-usage-complete)
 - [Feature Coverage and Module-by-Module Usage](#feature-coverage-and-module-by-module-usage)
 - [Third-Party Support Matrix](#third-party-support-matrix)
@@ -332,6 +333,66 @@ EITOHFORGE_TENANT_DB_SCHEMA_NAME_TEMPLATE={tenant_id}
 
 ---
 
+## Multi-Environment Usage (local/dev/staging/prod)
+
+`EITOHFORGE_APP_ENV` controls environment posture and capability hints (`local`, `dev`, `staging`, `prod`).
+
+### Recommended environment layering
+
+- Local laptop: `.env` + optional `.env.local`
+- CI/dev namespace: CI/CD injected env vars
+- Staging/prod: secret manager + deployment manifests (no plaintext secrets in repo)
+
+### Example: local
+
+```bash
+EITOHFORGE_APP_ENV=local
+EITOHFORGE_DB_DRIVER=sqlite
+EITOHFORGE_DB_NAME=:memory:
+EITOHFORGE_AUTH_JWT_SECRET=replace-with-long-local-secret
+EITOHFORGE_OBSERVABILITY_ENABLED=true
+EITOHFORGE_REALTIME_ENABLED=false
+```
+
+### Example: dev/staging
+
+```bash
+EITOHFORGE_APP_ENV=staging
+EITOHFORGE_DB_DRIVER=postgresql+psycopg
+EITOHFORGE_DB_HOST=postgres.staging.internal
+EITOHFORGE_DB_PORT=5432
+EITOHFORGE_DB_USERNAME=svc_eitohforge
+EITOHFORGE_DB_PASSWORD=***from-secret-store***
+EITOHFORGE_DB_NAME=eitohforge_staging
+EITOHFORGE_CACHE_PROVIDER=redis
+EITOHFORGE_CACHE_REDIS_URL=redis://redis.staging.internal:6379/0
+EITOHFORGE_REALTIME_ENABLED=true
+EITOHFORGE_REALTIME_REDIS_URL=redis://redis.staging.internal:6379/2
+EITOHFORGE_OBSERVABILITY_OTEL_ENABLED=true
+EITOHFORGE_OBSERVABILITY_OTEL_OTLP_HTTP_ENDPOINT=http://otel-collector:4318/v1/traces
+```
+
+### Example: production
+
+```bash
+EITOHFORGE_APP_ENV=prod
+EITOHFORGE_RUNTIME_ENFORCE_HTTPS_REDIRECT=true
+EITOHFORGE_SECURITY_HARDENING_ENABLED=true
+EITOHFORGE_RATE_LIMIT_ENABLED=true
+EITOHFORGE_REQUEST_SIGNING_ENABLED=true
+EITOHFORGE_TENANT_ENABLED=true
+EITOHFORGE_OBSERVABILITY_ENABLE_PROMETHEUS=true
+```
+
+### Environment profile guidance
+
+- `local`: fastest feedback, lightweight dependencies
+- `dev`: integration behavior close to prod, relaxed blast radius
+- `staging`: pre-prod with production-like data shape/traffic simulation
+- `prod`: strict security, observability, controlled rollout and autoscaling
+
+---
+
 ## SDK Usage (complete)
 
 The package name is `eitohforge`, but imports are from `eitohforge_sdk`.
@@ -462,6 +523,50 @@ app.include_router(build_realtime_router(settings_provider=get_settings))
 ```
 
 Client message types include `ping`, `join`, `leave`, `broadcast`, and `direct`.
+
+#### Socket authentication modes
+
+- `EITOHFORGE_REALTIME_REQUIRE_ACCESS_JWT=true`:
+  - token required at handshake
+  - invalid/missing token is rejected with close code `1008`
+- `false`:
+  - anonymous principal is allowed
+  - if token is present and valid, actor/tenant claims are still used
+
+#### Client message contract (inbound)
+
+```json
+{ "type": "ping" }
+{ "type": "join", "room": "orders:tenant-a" }
+{ "type": "leave", "room": "orders:tenant-a" }
+{ "type": "broadcast", "room": "orders:tenant-a", "event": "order.updated", "payload": { "id": "o-1" } }
+{ "type": "direct", "target_actor_id": "user-42", "event": "notify", "payload": { "kind": "alert" } }
+```
+
+#### Server message contract (outbound examples)
+
+```json
+{ "type": "connected", "connection_id": "...", "actor_id": "user-1", "tenant_id": "tenant-a" }
+{ "type": "joined", "room": "orders:tenant-a", "ok": true }
+{ "type": "broadcast_result", "room": "orders:tenant-a", "delivered": 5 }
+{ "type": "event", "event": "order.updated", "room": "orders:tenant-a", "payload": { "id": "o-1" } }
+{ "type": "error", "code": "NOT_IN_ROOM", "message": "Join the room before broadcasting." }
+```
+
+#### Scaling sockets across instances
+
+- Single-process: in-memory hub is sufficient
+- Multi-worker / multi-pod: configure `EITOHFORGE_REALTIME_REDIS_URL` to enable Redis fanout hub
+- Keep sticky sessions optional; fanout works across workers through Redis channel transport
+- For private/direct actor messages across instances, ensure consistent actor identity in JWT claims
+
+#### Production socket hardening checklist
+
+- require JWT handshake (`EITOHFORGE_REALTIME_REQUIRE_ACCESS_JWT=true`)
+- isolate room naming by tenant (`tenant_id` prefix convention)
+- enforce payload size limits at ingress / reverse proxy
+- monitor connection counts and broadcast delivery metrics
+- apply backpressure/timeouts in client and gateway layers
 
 ### 8) Request signing middleware
 
