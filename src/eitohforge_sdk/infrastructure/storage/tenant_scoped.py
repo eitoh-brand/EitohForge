@@ -6,7 +6,7 @@ Phase 18: tenant storage prefix.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import cast
 
 from eitohforge_sdk.core.tenant import TenantContext
 from eitohforge_sdk.infrastructure.storage.contracts import (

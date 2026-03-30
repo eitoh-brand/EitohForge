@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Any, Callable, Generic, Mapping, TypeVar
 from uuid import uuid4
 
-from sqlalchemy import Select, false as sa_false, func, inspect, select, text
+from sqlalchemy import Select, false as sa_false, func, inspect, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from eitohforge_sdk.application.dto.repository import (
