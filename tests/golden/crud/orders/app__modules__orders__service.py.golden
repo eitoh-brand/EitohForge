@@ -1,0 +1,75 @@
+from dataclasses import dataclass
+from uuid import uuid4
+
+from app.application.dto.repository import QuerySpec
+from app.application.dto.response import ApiResponse, ApiResponseMeta, PaginatedApiResponse, PaginationMeta
+from app.application.services.validation import ServiceValidationHooks
+from app.core.validation.context import ValidationContext
+from app.modules.orders.schema import (
+    OrdersCreate,
+    OrdersRead,
+    OrdersUpdate,
+)
+
+
+@dataclass
+class _OrdersRecord:
+    id: str
+    name: str
+
+
+class OrdersService:
+    def __init__(self) -> None:
+        self._items: dict[str, _OrdersRecord] = {}
+        self._validation = ServiceValidationHooks()
+
+    async def create(self, payload: OrdersCreate, context: ValidationContext) -> ApiResponse:
+        await self._validation.validate_or_raise(payload, context)
+        record = _OrdersRecord(id=str(uuid4()), name=payload.name)
+        self._items[record.id] = record
+        return ApiResponse(
+            data=OrdersRead(id=record.id, name=record.name),
+            message="Orders created",
+            meta=_response_meta(context),
+        )
+
+    async def list(self, query: QuerySpec, context: ValidationContext) -> PaginatedApiResponse:
+        await self._validation.validate_or_raise(query, context)
+        values = tuple(self._items.values())
+        offset = query.pagination.offset
+        page_size = query.pagination.page_size
+        page = values[offset : offset + page_size]
+        return PaginatedApiResponse(
+            data=tuple(OrdersRead(id=item.id, name=item.name) for item in page),
+            pagination=PaginationMeta(total=len(values), page_size=page_size),
+            message="Orders list",
+            meta=_response_meta(context),
+        )
+
+    async def update(
+        self, entity_id: str, payload: OrdersUpdate, context: ValidationContext
+    ) -> ApiResponse:
+        await self._validation.validate_or_raise(payload, context)
+        item = self._items.get(entity_id)
+        if item is None:
+            return ApiResponse(success=False, data=None, message="Orders not found")
+        if payload.name is not None:
+            item.name = payload.name
+        return ApiResponse(
+            data=OrdersRead(id=item.id, name=item.name),
+            message="Orders updated",
+            meta=_response_meta(context),
+        )
+
+    async def delete(self, entity_id: str, context: ValidationContext) -> ApiResponse:
+        await self._validation.validate_or_raise({"entity_id": entity_id}, context)
+        deleted = self._items.pop(entity_id, None) is not None
+        return ApiResponse(
+            data={"deleted": deleted},
+            message="Orders deleted" if deleted else "Orders not found",
+            meta=_response_meta(context),
+        )
+
+
+def _response_meta(context: ValidationContext) -> ApiResponseMeta:
+    return ApiResponseMeta(request_id=context.request_id, trace_id=context.trace_id)

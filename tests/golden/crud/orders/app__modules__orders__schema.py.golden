@@ -1,0 +1,20 @@
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class OrdersCreate(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    name: str = Field(min_length=1, max_length=128)
+
+
+class OrdersUpdate(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+
+
+class OrdersRead(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    id: str
+    name: str

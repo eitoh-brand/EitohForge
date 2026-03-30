@@ -1,0 +1,47 @@
+from fastapi import APIRouter, Request
+
+from app.application.dto.repository import QuerySpec
+from app.application.dto.response import ApiResponse, PaginatedApiResponse
+from app.core.security_context import get_request_security_context
+from app.core.validation.context import ValidationContext, ValidationStage
+from app.modules.orders.schema import (
+    OrdersCreate,
+    OrdersUpdate,
+)
+from app.modules.orders.service import OrdersService
+
+router = APIRouter(prefix="/orders", tags=["orders"])
+service = OrdersService()
+
+
+def _build_validation_context(request: Request) -> ValidationContext:
+    security_context = get_request_security_context(request)
+    return ValidationContext(
+        stage=ValidationStage.REQUEST,
+        actor_id=security_context.actor_id,
+        tenant_id=security_context.tenant_id,
+        request_id=security_context.request_id,
+        trace_id=security_context.trace_id,
+    )
+
+
+@router.post("/", response_model=ApiResponse)
+async def create_orders(payload: OrdersCreate, request: Request) -> ApiResponse:
+    return await service.create(payload, _build_validation_context(request))
+
+
+@router.post("/search", response_model=PaginatedApiResponse)
+async def list_orders(query: QuerySpec, request: Request) -> PaginatedApiResponse:
+    return await service.list(query, _build_validation_context(request))
+
+
+@router.patch("/{entity_id}", response_model=ApiResponse)
+async def update_orders(
+    entity_id: str, payload: OrdersUpdate, request: Request
+) -> ApiResponse:
+    return await service.update(entity_id, payload, _build_validation_context(request))
+
+
+@router.delete("/{entity_id}", response_model=ApiResponse)
+async def delete_orders(entity_id: str, request: Request) -> ApiResponse:
+    return await service.delete(entity_id, _build_validation_context(request))

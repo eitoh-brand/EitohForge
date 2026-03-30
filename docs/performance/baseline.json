@@ -1,0 +1,15 @@
+{
+  "generated_at": "2026-03-30T01:50:02.930889+00:00",
+  "metrics": {
+    "jwt.decode_access": {
+      "iterations": 1000,
+      "total_ms": 5.1846,
+      "avg_ms": 0.005185
+    },
+    "feature_flags.evaluate": {
+      "iterations": 1000,
+      "total_ms": 0.9151,
+      "avg_ms": 0.000915
+    }
+  }
+}

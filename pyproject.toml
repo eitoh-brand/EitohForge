@@ -1,0 +1,52 @@
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "eitohforge"
+version = "0.1.0"
+description = "Enterprise backend SDK and CLI for FastAPI systems."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+authors = [{ name = "EitohTech" }]
+dependencies = [
+  "alembic>=1.16.0",
+  "fastapi>=0.116.0",
+  "psycopg[binary]>=3.2.0",
+  "sqlalchemy>=2.0.0",
+  "pydantic>=2.11.0",
+  "pydantic-settings>=2.10.0",
+  "typer>=0.16.0",
+  "jinja2>=3.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0",
+  "pytest-cov>=6.2.0",
+  "mypy>=1.16.0",
+  "ruff>=0.12.0",
+  "build>=1.2.0",
+  "httpx>=0.28.0",
+]
+
+[project.scripts]
+eitohforge = "eitohforge_cli.main:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/eitohforge_cli", "src/eitohforge_sdk"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_configs = true
+mypy_path = "src"

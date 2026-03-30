@@ -1,0 +1,30 @@
+import asyncio
+
+from app.application.dto.repository import QuerySpec
+from app.core.validation.context import ValidationContext, ValidationStage
+from app.modules.orders.schema import OrdersCreate, OrdersUpdate
+from app.modules.orders.service import OrdersService
+
+
+def _context() -> ValidationContext:
+    return ValidationContext(stage=ValidationStage.REQUEST)
+
+
+def test_orders_service_crud_cycle() -> None:
+    service = OrdersService()
+
+    created = asyncio.run(service.create(OrdersCreate(name="first"), _context()))
+    assert created.success is True
+    entity_id = getattr(created.data, "id")
+
+    listed = asyncio.run(service.list(QuerySpec(), _context()))
+    assert listed.success is True
+    assert listed.pagination.total >= 1
+
+    updated = asyncio.run(service.update(entity_id, OrdersUpdate(name="second"), _context()))
+    assert updated.success is True
+    assert getattr(updated.data, "name") == "second"
+
+    deleted = asyncio.run(service.delete(entity_id, _context()))
+    assert deleted.success is True
+    assert deleted.data == {"deleted": True}

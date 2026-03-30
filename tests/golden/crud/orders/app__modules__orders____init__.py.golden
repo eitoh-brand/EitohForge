@@ -1,0 +1,10 @@
+"""CRUD module for orders."""
+
+from app.modules.orders.router import router
+from app.modules.orders.schema import (
+    OrdersCreate,
+    OrdersRead,
+    OrdersUpdate,
+)
+
+__all__ = ["router", "OrdersCreate", "OrdersRead", "OrdersUpdate"]
