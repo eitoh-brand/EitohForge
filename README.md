@@ -33,6 +33,7 @@ This README is intentionally **long-form for PyPI** and covers features, module 
 - [Third-Party Support Matrix](#third-party-support-matrix)
 - [Configuration and Environment Variables](#configuration-and-environment-variables)
 - [Examples](#examples)
+- [Deployment Blueprints (end-to-end)](#deployment-blueprints-end-to-end)
 - [Documentation (multi-page)](#documentation-multi-page)
 - [License](#license)
 
@@ -796,6 +797,123 @@ For exhaustive keys and behavior, see:
 
 - `examples/example-minimal/` — minimal app with health + capabilities
 - `examples/example-enterprise/` — full platform wiring using `build_forge_app`
+
+---
+
+## Deployment Blueprints (end-to-end)
+
+These blueprints provide practical infrastructure layouts for common maturity stages.
+
+### Blueprint A: Single node (small internal service)
+
+Best for: development, POC, low traffic internal tools.
+
+- 1 VM/container host running app (`uvicorn --workers N`)
+- local or managed PostgreSQL
+- optional Redis (if using Redis cache/session/realtime fanout)
+- reverse proxy / TLS terminator (Nginx/Caddy/Ingress)
+
+Suggested settings:
+
+```bash
+EITOHFORGE_APP_ENV=dev
+EITOHFORGE_DB_DRIVER=postgresql+psycopg
+EITOHFORGE_CACHE_PROVIDER=memory
+EITOHFORGE_REALTIME_ENABLED=false
+EITOHFORGE_OBSERVABILITY_ENABLE_PROMETHEUS=true
+```
+
+Trade-offs:
+
+- simplest operations
+- limited horizontal scale and fault tolerance
+
+### Blueprint B: HA service (LB + app replicas + Redis + Postgres)
+
+Best for: production baseline with predictable traffic and HA requirements.
+
+Topology:
+
+- L7 load balancer / ingress
+- 2+ stateless app instances
+- managed PostgreSQL (primary + replica/backup strategy)
+- managed Redis (cache/session/realtime pub-sub)
+- OTEL collector + Prometheus scraping (optional but recommended)
+
+Suggested runtime contracts:
+
+```bash
+EITOHFORGE_APP_ENV=prod
+EITOHFORGE_DB_DRIVER=postgresql+psycopg
+EITOHFORGE_CACHE_PROVIDER=redis
+EITOHFORGE_CACHE_REDIS_URL=redis://redis.internal:6379/0
+EITOHFORGE_REALTIME_ENABLED=true
+EITOHFORGE_REALTIME_REDIS_URL=redis://redis.internal:6379/2
+EITOHFORGE_TENANT_ENABLED=true
+EITOHFORGE_RATE_LIMIT_ENABLED=true
+EITOHFORGE_REQUEST_SIGNING_ENABLED=true
+```
+
+Operational notes:
+
+- keep app layer stateless
+- use Redis-backed providers for cross-instance consistency
+- perform zero-downtime deploys with rolling updates and readiness probes
+
+### Blueprint C: Kubernetes (multi-env, autoscaling)
+
+Best for: team-scale platform operations and multi-environment delivery.
+
+Typical layout:
+
+- namespace per environment (`dev`, `staging`, `prod`)
+- Deployment for API app, optional Deployment for workers
+- Service + Ingress for HTTP/WebSocket
+- HPA for API pods
+- Secret/ConfigMap for `EITOHFORGE_*`
+- external managed Postgres/Redis/OpenSearch
+
+Minimal K8s env strategy:
+
+- `ConfigMap`: non-secret settings (feature flags, host/port, toggles)
+- `Secret`: DB credentials, JWT/request-signing secrets, provider credentials
+- rollout by image tag + env version stamp
+
+### WebSocket and realtime in production blueprints
+
+For Blueprint B/C:
+
+- enable realtime route and JWT requirement:
+  - `EITOHFORGE_REALTIME_ENABLED=true`
+  - `EITOHFORGE_REALTIME_REQUIRE_ACCESS_JWT=true`
+- configure Redis fanout:
+  - `EITOHFORGE_REALTIME_REDIS_URL=redis://...`
+- ensure ingress supports WebSocket upgrades and sane idle timeouts
+
+### Database and migration operations in blueprints
+
+Common release flow:
+
+1. deploy new code with backward-compatible schema reads
+2. run `eitohforge db upgrade` (or CI/CD migration step)
+3. switch traffic progressively
+4. monitor health/readiness/error/latency dashboards
+
+For multi-tenant schema isolation in Postgres:
+
+```bash
+EITOHFORGE_TENANT_ENABLED=true
+EITOHFORGE_TENANT_DB_SCHEMA_ISOLATION_ENABLED=true
+EITOHFORGE_TENANT_DB_SCHEMA_NAME_TEMPLATE={tenant_id}
+```
+
+### Security baseline across all blueprints
+
+- enforce HTTPS redirect and host hardening
+- use strong JWT secret and rotate periodically
+- enable request signing for write-critical APIs
+- enable rate limit + idempotency on mutating routes
+- avoid plaintext secrets in repo; use secret manager/CI secrets
 
 ---
 
