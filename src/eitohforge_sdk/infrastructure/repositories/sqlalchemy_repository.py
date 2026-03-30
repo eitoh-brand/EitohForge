@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Any, Callable, Generic, Mapping, TypeVar
 from uuid import uuid4
 
-from sqlalchemy import Select, false as sa_false, func, inspect, select
+from sqlalchemy import Select, false as sa_false, func, inspect, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from eitohforge_sdk.application.dto.repository import (
@@ -193,7 +193,8 @@ class SQLAlchemyRepository(
             raise ValueError(f"Invalid tenant schema name resolved from tenant_id={tenant_id!r}.")
 
         # SET LOCAL affects the current transaction only.
-        session.execute(f'SET LOCAL search_path TO "{schema_name}"')
+        # Use SQLAlchemy `text()` so Session.execute is properly typed.
+        session.execute(text(f'SET LOCAL search_path TO "{schema_name}"'))
 
     def _base_statement(self, context: RepositoryContext | None) -> Select[Any]:
         statement = select(self._model_type)

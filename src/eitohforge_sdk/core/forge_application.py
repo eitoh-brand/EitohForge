@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+import inspect
+from typing import Any
 
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
@@ -75,7 +77,7 @@ def build_forge_app(*, build: ForgeAppBuildConfig) -> FastAPI:
     redis_rt_url = settings.realtime.redis_url if wire_rt else None
 
     @asynccontextmanager
-    async def _realtime_redis_lifespan(app: FastAPI):
+    async def _realtime_redis_lifespan(app: FastAPI) -> AsyncIterator[None]:
         stop = asyncio.Event()
         task = asyncio.create_task(
             run_realtime_redis_subscriber(app, settings_provider=settings_provider, stop=stop)
@@ -89,10 +91,13 @@ def build_forge_app(*, build: ForgeAppBuildConfig) -> FastAPI:
                 await task
             except asyncio.CancelledError:
                 pass
-            hub = getattr(app.state, "socket_hub", None)
-            if hub is not None and hasattr(hub, "aclose"):
+            hub: Any = getattr(app.state, "socket_hub", None)
+            aclose = getattr(hub, "aclose", None) if hub is not None else None
+            if callable(aclose):
                 try:
-                    await hub.aclose()  # type: ignore[misc]
+                    result = aclose()
+                    if inspect.isawaitable(result):
+                        await result
                 except Exception:
                     pass
 
@@ -157,6 +162,7 @@ def build_forge_app(*, build: ForgeAppBuildConfig) -> FastAPI:
                     {"service.name": settings.observability.otel_service_name or settings.app_name}
                 )
                 provider = TracerProvider(resource=resource)
+                exporter: Any
                 if settings.observability.otel_otlp_http_endpoint:
                     exporter = OTLPSpanExporter(endpoint=settings.observability.otel_otlp_http_endpoint)
                     provider.add_span_processor(BatchSpanProcessor(exporter))
