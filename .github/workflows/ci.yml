@@ -130,13 +130,13 @@ jobs:
       - name: Generate SBOM
         run: |
           mkdir -p compliance
-          cyclonedx-py environment --output-file compliance/sbom.cdx.json --of JSON
+          uv run cyclonedx-py environment --output-file compliance/sbom.cdx.json --of JSON
 
       - name: Generate dependency licenses report
-        run: pip-licenses --format=json --output-file=./compliance/licenses.json
+        run: uv run pip-licenses --format=json --output-file=./compliance/licenses.json
 
       - name: Enforce dependency license policy
-        run: python scripts/check_license_policy.py
+        run: uv run python scripts/check_license_policy.py
 
       - name: Upload compliance artifacts
         uses: actions/upload-artifact@v4
