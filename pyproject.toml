@@ -105,3 +105,7 @@ python_version = "3.12"
 strict = true
 warn_unused_configs = true
 mypy_path = "src"
+
+[tool.uv]
+# Transitive pins (e.g. security advisories) without adding runtime deps to [project].
+constraint-dependencies = ["pygments>=2.20.0"]
