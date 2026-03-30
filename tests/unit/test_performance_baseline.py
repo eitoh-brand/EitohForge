@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import pytest
+
 from eitohforge_sdk.core.performance import BenchmarkMetric, detect_regressions, run_micro_benchmarks
+
+pytestmark = pytest.mark.perf
 
 
 def test_run_micro_benchmarks_returns_metrics() -> None:

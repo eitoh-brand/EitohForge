@@ -464,6 +464,13 @@ The roadmap explicitly includes all architecture families from the blueprint, ei
 - audit logs, observability, health endpoints
 - plugin system, API versioning, feature flags
 
+## Post-baseline: Blueprint completion (Phase 17)
+
+After the baseline delivery (Phases 0–16, examples, and docs closure), remaining work to align **depth** with `secure_backend_sdk_architecture.md` is tracked as **Phase 17** on the execution board (`P17-*`).
+
+- **Plan:** `docs/roadmap/blueprint-completion-waves.md` — waves A–F (data/query, CRUD/API versioning, event bus, realtime scale, ops/telemetry, governance).
+- **Depth model:** L1 (contract) → L2 (product) → L3 (enterprise); each wave updates the architecture appendix and optional coverage matrix depth column.
+
 ## Exit Gates for “Start Coding”
 
 - roadmap approved

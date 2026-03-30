@@ -193,4 +193,208 @@ class InMemorySocketHub:
             delivered += 1
         return delivered
 """,
+    "app/presentation/routers/realtime.py": """# WebSocket /realtime/ws: JWT handshake, rooms, broadcast, presence.
+# JSON frames: type ping|join|leave|broadcast|presence — see docs/guides/realtime-websocket.md
+# Token: ?token=<access_jwt> or Authorization: Bearer. Hub is in-memory (single process).
+
+from __future__ import annotations
+
+import json
+from datetime import timedelta
+from typing import Any
+
+from fastapi import APIRouter, FastAPI, WebSocket
+from starlette.websockets import WebSocketDisconnect
+
+from app.core.auth import JwtTokenManager
+from app.core.config import get_settings
+from app.infrastructure.sockets import (
+    InMemorySocketHub,
+    JwtSocketAuthenticator,
+    SocketAuthenticationError,
+    extract_socket_token,
+)
+from app.infrastructure.sockets.contracts import SocketPrincipal
+
+router = APIRouter(prefix="/realtime", tags=["realtime"])
+
+
+def build_jwt_token_manager() -> JwtTokenManager | None:
+    s = get_settings()
+    if not s.auth.jwt_enabled:
+        return None
+    return JwtTokenManager(
+        secret=s.auth.jwt_secret,
+        access_ttl=timedelta(minutes=s.auth.access_token_minutes),
+        refresh_ttl=timedelta(days=s.auth.refresh_token_days),
+    )
+
+
+def register_socket_state(app: FastAPI) -> None:
+    app.state.socket_hub = InMemorySocketHub()
+
+
+@router.websocket("/ws")
+async def realtime_websocket(websocket: WebSocket) -> None:
+    settings = get_settings()
+    token = extract_socket_token(
+        query_params=dict(websocket.query_params),
+        headers=dict(websocket.headers),
+    )
+    principal: SocketPrincipal | None = None
+    if settings.realtime.require_access_jwt:
+        if not token:
+            await websocket.close(code=1008)
+            return
+        if not settings.auth.jwt_enabled:
+            await websocket.close(code=1008)
+            return
+        manager = build_jwt_token_manager()
+        if manager is None:
+            await websocket.close(code=1008)
+            return
+        try:
+            principal = JwtSocketAuthenticator(manager).authenticate(token)
+        except SocketAuthenticationError:
+            await websocket.close(code=1008)
+            return
+    else:
+        if token and settings.auth.jwt_enabled:
+            manager = build_jwt_token_manager()
+            if manager is not None:
+                try:
+                    principal = JwtSocketAuthenticator(manager).authenticate(token)
+                except SocketAuthenticationError:
+                    await websocket.close(code=1008)
+                    return
+        if principal is None:
+            principal = SocketPrincipal(actor_id="anonymous", tenant_id=None, claims={})
+
+    hub: InMemorySocketHub = websocket.app.state.socket_hub
+    await websocket.accept()
+    connection_id = hub.register(websocket, principal)
+    await websocket.send_json(
+        {
+            "type": "connected",
+            "connection_id": connection_id,
+            "actor_id": principal.actor_id,
+            "tenant_id": principal.tenant_id,
+        }
+    )
+    try:
+        while True:
+            try:
+                raw = await websocket.receive_text()
+            except WebSocketDisconnect:
+                break
+            try:
+                message = json.loads(raw)
+            except json.JSONDecodeError:
+                await websocket.send_json(
+                    {"type": "error", "code": "INVALID_JSON", "message": "Payload must be JSON."}
+                )
+                continue
+            if not isinstance(message, dict):
+                await websocket.send_json(
+                    {"type": "error", "code": "INVALID_SHAPE", "message": "Payload must be a JSON object."}
+                )
+                continue
+            await _handle_client_message(websocket, hub, connection_id, message)
+    finally:
+        hub.disconnect(connection_id)
+
+
+async def _handle_client_message(
+    websocket: WebSocket,
+    hub: InMemorySocketHub,
+    connection_id: str,
+    message: dict[str, Any],
+) -> None:
+    msg_type = message.get("type")
+    if msg_type == "ping":
+        await websocket.send_json({"type": "pong"})
+        return
+    if msg_type == "join":
+        room = message.get("room")
+        if not isinstance(room, str) or not room.strip():
+            await websocket.send_json(
+                {"type": "error", "code": "INVALID_ROOM", "message": "join requires non-empty string room."}
+            )
+            return
+        normalized = room.strip()
+        ok = hub.join_room(normalized, connection_id)
+        await websocket.send_json({"type": "joined", "room": normalized, "ok": ok})
+        return
+    if msg_type == "leave":
+        room = message.get("room")
+        if not isinstance(room, str) or not room.strip():
+            await websocket.send_json(
+                {"type": "error", "code": "INVALID_ROOM", "message": "leave requires non-empty string room."}
+            )
+            return
+        normalized = room.strip()
+        ok = hub.leave_room(normalized, connection_id)
+        await websocket.send_json({"type": "left", "room": normalized, "ok": ok})
+        return
+    if msg_type == "broadcast":
+        room = message.get("room")
+        event = message.get("event")
+        if not isinstance(room, str) or not room.strip():
+            await websocket.send_json(
+                {"type": "error", "code": "INVALID_ROOM", "message": "broadcast requires non-empty string room."}
+            )
+            return
+        if not isinstance(event, str) or not event.strip():
+            await websocket.send_json(
+                {"type": "error", "code": "INVALID_EVENT", "message": "broadcast requires non-empty string event."}
+            )
+            return
+        normalized = room.strip()
+        if connection_id not in hub.room_members(normalized):
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "code": "NOT_IN_ROOM",
+                    "message": "Join the room before broadcasting.",
+                }
+            )
+            return
+        payload = message.get("payload")
+        if payload is not None and not isinstance(payload, dict):
+            await websocket.send_json(
+                {"type": "error", "code": "INVALID_PAYLOAD", "message": "payload must be an object."}
+            )
+            return
+        delivered = await hub.broadcast(
+            room=normalized,
+            event=event.strip(),
+            payload=payload or {},
+            exclude_connection_id=connection_id,
+        )
+        await websocket.send_json({"type": "broadcast_result", "room": normalized, "delivered": delivered})
+        return
+    if msg_type == "presence":
+        room = message.get("room")
+        if not isinstance(room, str) or not room.strip():
+            await websocket.send_json(
+                {"type": "error", "code": "INVALID_ROOM", "message": "presence requires non-empty string room."}
+            )
+            return
+        normalized = room.strip()
+        members = hub.room_members(normalized)
+        presence = hub.room_presence(normalized)
+        await websocket.send_json(
+            {
+                "type": "presence_result",
+                "room": normalized,
+                "connection_ids": list(members),
+                "by_actor": presence,
+            }
+        )
+        return
+
+    await websocket.send_json(
+        {"type": "error", "code": "UNKNOWN_TYPE", "message": f"Unknown type: {msg_type!r}."}
+    )
+""",
 }

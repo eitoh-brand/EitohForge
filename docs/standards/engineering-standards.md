@@ -26,6 +26,15 @@ This document defines mandatory standards for development, generated code, and r
 - Required settings validated at startup; fail fast on invalid config.
 - Keep `.env.example` updated whenever settings change.
 
+### Platform feature toggles
+
+Choose **one primary control plane** per deployment and document it:
+
+- **Environment (`EITOHFORGE_*`)** — default for twelve-factor apps; use `standard` vs `minimal` CLI profile only to seed `.env.example`.
+- **`ForgePlatformToggles`** — per-field `True` / `False` / `None` on `ForgeAppBuildConfig`; `None` inherits from settings. Use for tests, constrained environments, or forcing behavior independent of env.
+- **`forge_platform_toggles_uniform(enabled=...)`** — same as setting every toggle field to `True` or `False`; pair with `ForgeAppBuildConfig.wire_*` when you also need to omit entire route families.
+- **`ForgeAppBuildConfig.wire_platform_middleware`** — when `False`, skips most middleware registration (see SDK `build_forge_app`); still applies HTTPS redirect and CORS per toggles/settings where applicable.
+
 ## 4) Type Safety
 
 - All public SDK interfaces must have explicit type annotations.

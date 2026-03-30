@@ -2,6 +2,13 @@
 
 This guide defines production deployment expectations for SSL/TLS, load balancing, and reliability.
 
+Companion runbooks:
+
+- `docs/guides/tls-and-cert-rotation-runbook.md`
+- `docs/guides/mtls-trust-model.md`
+- `docs/guides/load-balancing-and-health-routing.md`
+- `docs/guides/deployment-strategies-and-rollback-controls.md`
+
 ## 1) TLS/SSL Baseline
 
 - Enforce HTTPS in all production and staging environments.

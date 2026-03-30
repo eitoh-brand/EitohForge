@@ -811,6 +811,9 @@ cache isolation
 identity isolation
 ```
 
+Implementation note:
+schema-per-tenant uses Postgres `search_path` (`EITOHFORGE_TENANT_DB_SCHEMA_ISOLATION_ENABLED=true`) with the resolved tenant id interpolated into `EITOHFORGE_TENANT_DB_SCHEMA_NAME_TEMPLATE`.
+
 ---
 
 # 36. Plugin System
@@ -1532,4 +1535,48 @@ You will have a reusable backend platform comparable in capability to:
 
 ---
 
-If you want, I can generate the **initial repository structure + starter code skeleton** for Phase 0 so you can begin implementation immediately.
+# Appendix — EitohForge implementation map (living)
+
+This blueprint predates the **`eitohforge`** CLI and **`eitohforge_sdk`** package. The **target command line** for the shipped product is:
+
+```bash
+eitohforge create project <name> [--profile standard|minimal]
+```
+
+not `secureapi create`. The table below maps blueprint sections (§1–§44) to the **current** repository state. **Implemented** means a usable baseline exists in tree; **Partial** means the idea is present but narrower than the blueprint; **Planned / gap** means not yet aligned with the spec.
+
+| § | Blueprint topic | Status | Notes |
+|---|-----------------|--------|--------|
+| 1 | Layered clean architecture | Implemented | Templates + SDK modules follow presentation / application / domain / infrastructure / core. |
+| 2 | Generated folder structure | Implemented | `eitohforge create project` scaffolds `app/` layout consistent with the blueprint. |
+| 3 | Central configuration | Partial | **`AppSettings`** (`pydantic-settings`, `EITOHFORGE_*`) replaces the sample `BackendSDKConfig` API; feature toggles via env, **`ForgePlatformToggles`**, **`forge_platform_toggles_uniform`**, and **`ForgeAppBuildConfig.wire_*`**. |
+| 4 | Polyglot persistence | Partial | **Postgres**, **MySQL** (`MySQLProvider`, `mysql+pymysql`, `pymysql`), **SQLite** in factory + registry roles. **`DatabaseSettings.sqlalchemy_url`** covers all three. **Mongo** etc. still out of scope. |
+| 5 | Generic repository | Implemented | **`RepositoryContract`** (Protocol) + **`SqlalchemyRepository`** adapter. |
+| 6 | Query specification | Partial | **`QuerySpec`** + **`SQLAlchemyRepository`** document and tests in **`docs/guides/query-spec-reference.md`** (blueprint §6 operators on SQL path; extensions `in` / `not_in`). Optional **`validate_query_filters_against_columns`**. Not a Mongo/document engine or standalone query DSL beyond this. |
+| 7 | CRUD auto generator | Partial | **`eitohforge create crud`** ships richer **field types** (optional text, int, bool, datetime, **FK-style** `parent_resource_id`) + **golden** tests; still in-memory service stub, not full SQL CRUD codegen per entity. |
+| 8–9 | Request/response + pagination | Implemented | DTOs (`ApiResponse`, pagination types) in application layer. |
+| 10–15 | Auth, session, RBAC, ABAC, SSO, JWT+session | Implemented / Partial | JWT, session stores, RBAC helpers, ABAC **`PolicyEngine`**, OIDC/SAML SSO adapters; “unified identity model” depth varies by integration. |
+| 16–19 | Storage, presign, policies, CDN | Implemented / Partial | **`StorageProvider`** / **`PresignableStorageProvider`**, local + S3, policy + CDN helpers. |
+| 20 | Distributed cache | Implemented | Memory + Redis contracts and factory. |
+| 21–23 | Rate limit, notifications, templated messaging | Implemented | Middleware + gateway + template engine baselines. |
+| 24–26 | Jobs, external API, webhooks | Implemented | In-memory jobs, HTTP client, webhook dispatcher + signing contracts. |
+| 27 | Event bus | Partial | **`InMemoryEventBus`** + **`RedisPublishingEventBus`** (Redis **PUBLISH** sidecar); cross-process **SUBSCRIBE** is app-owned (cookbook). |
+| 28–29 | Multi-DB + distributed transactions | Partial | **Registry** + **saga** module; depth below full blueprint. |
+| 30 | Search | Partial | Memory + OpenSearch-style adapter; Elasticsearch-specific breadth not guaranteed. |
+| 31–33 | Audit, security middleware, request signing | Implemented | Wired through **`build_forge_app`** with toggles. |
+| 34 | Capabilities endpoint | Implemented | **`/sdk/capabilities`** (+ profile for auth/runtime/realtime). |
+| 35–36 | Multi-tenant + plugins | Implemented | Tenant middleware + **`PluginRegistry`**. |
+| 37–38 | Observability + health | Implemented | Middleware with optional Prometheus request metrics (`/metrics`) + OTEL tracer wiring (sets `x-trace-id` from span context when enabled); health routes remain intact. |
+| 39 | Secret management | Implemented | **`VaultSecretProvider`** implements the `SecretProvider` contract via Vault KV read (best-effort) and is wired in `build_secret_provider` for `EITOHFORGE_SECRET_PROVIDER=vault`. Value extraction supports common KV v2/v1 shapes; unit tests mock HTTP responses (no caching, so rotation is picked up on re-fetch). |
+| 40 | Security context | Implemented | Request-scoped context middleware. |
+| 41 | Sockets | Partial | **`InMemorySocketHub`** / **`RedisFanoutSocketHub`** (multi-worker **broadcast** + **`direct`** to `actor_id` via Redis); **`/realtime/ws`**; **room “privacy”** is naming-only; **authorization** for who may join or direct-message whom is **application-owned** (documented in **`realtime-websocket.md`**). |
+| 42 | Versioned API | Partial | **`ApiVersion`**, **`build_versioned_router`**, **`ApiVersioningSettings`** + deprecation headers on **`/v1`** via **`build_forge_app`**; separate OpenAPI per mount documented in cookbook. |
+| 43–44 | Idempotency + feature flags | Implemented | Header-based idempotency + feature flag service and endpoint. |
+
+**Conclusion:** The blueprint is **not** fully implemented line-for-line; it remains the **north star**. The SDK covers a large subset of §1–§44 with **protocol-first** infra boundaries where it matters (storage, DB provider, repositories). Gaps cluster around **additional database engines**, **richer query/event systems**, **socket private channels**, and **operations/secret backends**. Use this appendix when prioritizing roadmap items; keep it updated when major capabilities land.
+
+---
+
+For day-to-day usage, see **`docs/guides/usage-complete.md`**, **`docs/guides/forge-profiles.md`**, and **`docs/standards/engineering-standards.md`**.
+
+To close remaining gaps vs this specification, see **`docs/roadmap/blueprint-completion-waves.md`** and execution board Phase 17 (`P17-*`).

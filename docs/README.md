@@ -2,6 +2,8 @@
 
 This folder contains the long-term planning and implementation documentation for the EitohForge backend SDK platform.
 
+**Blueprint (repository root):** `../secure_backend_sdk_architecture.md` — full A–Z target architecture; the **Appendix — EitohForge implementation map** at the end of that file compares §1–§44 to what is implemented today.
+
 ## Documents
 
 - `roadmap/master-implementation-roadmap.md`  
@@ -10,22 +12,42 @@ This folder contains the long-term planning and implementation documentation for
   Task-level execution board with IDs, estimates, dependencies, and done criteria.
 - `roadmap/architecture-coverage-matrix.md`  
   Traceability map from all 44 architecture items to tracked tasks.
+- `roadmap/blueprint-completion-waves.md`  
+  Post-baseline plan to reach L1/L2/L3 depth vs `secure_backend_sdk_architecture.md`; links to Phase 17 tasks (`P17-*`).
 - `standards/engineering-standards.md`  
   Coding, validation, migration, security, testing, and release standards.
+- `standards/flaky-test-policy.md`  
+  Quarantine, ownership, and remediation SLA for flaky tests.
 - `guides/phase-0-and-1-kickoff.md`  
   Immediate implementation checklist for getting started.
 - `guides/python-packaging-and-publishing.md`  
   Package build, release channels, and publish workflow.
+- `guides/usage-complete.md`  
+  Full usage: install, config, migrations, auth, plugins, deploy, troubleshooting.
+- `guides/onboarding-qa-simulation.md`  
+  New-hire / release QA checklist for onboarding without hand-holding.
 - `guides/enterprise-readiness-checklist.md`  
   Production and enterprise readiness validation checklist.
 - `guides/enterprise-deployment-and-networking.md`  
   SSL/TLS, load balancing, deployment reliability, and HA guidance.
+- `guides/tls-and-cert-rotation-runbook.md`  
+  Ingress TLS policy, cert lifecycle, and emergency rotation procedure.
+- `guides/mtls-trust-model.md`  
+  Optional internal mTLS trust domains, identity mapping, and rollout modes.
+- `guides/load-balancing-and-health-routing.md`  
+  LB architecture, readiness routing policy, and health-check baseline.
+- `guides/deployment-strategies-and-rollback-controls.md`  
+  Rolling/blue-green/canary playbooks with abort and rollback controls.
 - `guides/testing-and-example-project-strategy.md`  
   Test completeness model and reference example project requirements.
 - `guides/repository-contracts-and-dto-boundaries.md`  
   Clean architecture repository contract and persistence DTO reference.
+- `guides/query-spec-reference.md`  
+  `QuerySpec` filter operators, pagination modes, and optional column validation.
 - `guides/cookbook.md`  
   Implementation recipes for tenanting, plugins, flags, hardening, and perf checks.
+- `guides/operations-runbook.md`  
+  Deploy, rollback, SLO, error budget, and incident response baseline.
 - `performance/baseline.md`  
   Latest generated baseline benchmark report.
 - `releases/v0.1.0-rc.md`  

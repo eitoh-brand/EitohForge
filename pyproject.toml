@@ -10,13 +10,30 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Proprietary" }
 authors = [{ name = "EitohTech" }]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Framework :: FastAPI",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Typing :: Typed",
+]
+keywords = ["fastapi", "sdk", "cli", "enterprise", "scaffold"]
 dependencies = [
   "alembic>=1.16.0",
   "fastapi>=0.116.0",
+  "opentelemetry-api>=1.0.0",
+  "opentelemetry-sdk>=1.0.0",
+  "opentelemetry-exporter-otlp>=1.0.0",
   "psycopg[binary]>=3.2.0",
+  "pymysql>=1.1.0",
+  "prometheus-client>=0.20.0",
   "sqlalchemy>=2.0.0",
   "pydantic>=2.11.0",
   "pydantic-settings>=2.10.0",
+  "redis>=5.0.0",
   "typer>=0.16.0",
   "jinja2>=3.1.0",
 ]
@@ -29,17 +46,55 @@ dev = [
   "ruff>=0.12.0",
   "build>=1.2.0",
   "httpx>=0.28.0",
+  "uvicorn>=0.32.0",
+]
+release = [
+  "build>=1.2.0",
+  "twine>=5.1.0",
+  "pip-audit>=2.8.0",
+  "cyclonedx-bom>=4.0.0",
+  "pip-licenses>=4.4.0",
 ]
 
 [project.scripts]
 eitohforge = "eitohforge_cli.main:run"
 
+[project.urls]
+Homepage = "https://github.com/eitoh-brand/EitohForge"
+Repository = "https://github.com/eitoh-brand/EitohForge"
+Issues = "https://github.com/eitoh-brand/EitohForge/issues"
+
+[tool.hatch.build]
+reproducible = true
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/eitohforge_cli", "src/eitohforge_sdk"]
 
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src",
+  "/tests",
+  "/docs",
+  "/scripts",
+  "/examples",
+  "/.github/workflows",
+  "/README.md",
+  "/CONTRIBUTING.md",
+  "/pyproject.toml",
+  "/uv.lock",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q --strict-markers --cov=eitohforge_sdk --cov=eitohforge_cli --cov-fail-under=82 --cov-report=term-missing"
+markers = [
+  "contract: API and error schema contract tests",
+  "e2e: End-to-end journeys (CLI scaffold + HTTP)",
+  "migration: Migration policy and Alembic layout tests",
+  "perf: Performance baseline and regression checks",
+  "security: Security control regression tests",
+  "flaky: Quarantined flaky test (requires owner + remediation ticket)",
+]
 
 [tool.ruff]
 line-length = 100

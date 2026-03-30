@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "default_host": "127.0.0.1",
+  "services": [
+    {
+      "name": "example-enterprise",
+      "module": "example_enterprise.main:app",
+      "port": 8010
+    }
+  ]
+}

@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 import logging
 from time import perf_counter
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -44,12 +44,57 @@ class InMemoryMetricsSink:
         self.counters[key] = self.counters.get(key, 0) + value
 
 
+def _new_prom_registry() -> Any:
+    from prometheus_client import CollectorRegistry
+
+    return CollectorRegistry()
+
+
+@dataclass
+class PrometheusMetricsSink:
+    """Prometheus metrics sink (per-app registry to avoid duplicates)."""
+
+    namespace: str = "eitohforge"
+    registry: Any = field(default_factory=_new_prom_registry)
+    _request_total: Any = field(init=False)
+    _request_duration_ms: Any = field(init=False)
+
+    def __post_init__(self) -> None:
+        from prometheus_client import Counter, Histogram
+
+        self._request_total = Counter(
+            f"{self.namespace}_http_requests_total",
+            "Total HTTP requests.",
+            labelnames=("method", "path", "status"),
+            registry=self.registry,
+        )
+        self._request_duration_ms = Histogram(
+            f"{self.namespace}_http_requests_duration_ms",
+            "HTTP request duration (ms).",
+            labelnames=("method", "path", "status"),
+            registry=self.registry,
+        )
+
+    def increment(self, name: str, value: int = 1, *, tags: Mapping[str, str] | None = None) -> None:
+        tags = tags or {}
+        method = tags.get("method", "UNKNOWN")
+        path = tags.get("path", "UNKNOWN")
+        status = tags.get("status", "UNKNOWN")
+        if name == "http.requests.total":
+            self._request_total.labels(method=method, path=path, status=status).inc(value)
+            return
+        if name == "http.requests.duration_ms":
+            self._request_duration_ms.labels(method=method, path=path, status=status).observe(value)
+            return
+
+
 def register_observability_middleware(
     app: FastAPI,
     rule: ObservabilityRule,
     *,
     metrics_sink: MetricsSink | None = None,
     logger: logging.Logger | None = None,
+    otel_tracer: Any | None = None,
 ) -> MetricsSink:
     """Register request observability middleware."""
     sink = metrics_sink or InMemoryMetricsSink()
@@ -69,7 +114,24 @@ def register_observability_middleware(
             request.state.request_id = request_id
 
         start = perf_counter()
-        response = await call_next(request)
+        response: Response
+
+        if rule.enable_tracing and otel_tracer is not None:
+            attributes = {"http.method": request.method.upper(), "http.route": request.url.path}
+            with otel_tracer.start_as_current_span(
+                name=f"HTTP {request.method.upper()}",
+                attributes=attributes,
+            ) as span:
+                response = await call_next(request)
+                try:
+                    span_ctx = span.get_span_context()
+                    if getattr(span_ctx, "trace_id", 0):
+                        trace_id = f"{span_ctx.trace_id:032x}"
+                        request.state.trace_id = trace_id
+                except Exception:
+                    pass
+        else:
+            response = await call_next(request)
         duration_ms = int((perf_counter() - start) * 1000)
 
         response.headers[rule.trace_header] = trace_id
@@ -98,6 +160,19 @@ def register_observability_middleware(
         return response
 
     return sink
+
+
+def register_prometheus_metrics_endpoint(
+    app: FastAPI, *, metrics_sink: PrometheusMetricsSink, path: str
+) -> None:
+    """Expose Prometheus metrics for `metrics_sink`."""
+    from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+
+    async def _metrics() -> Response:
+        body = generate_latest(metrics_sink.registry)
+        return Response(content=body, media_type=CONTENT_TYPE_LATEST)
+
+    app.add_api_route(path, _metrics, methods=["GET"], include_in_schema=False)
 
 
 def get_request_trace_id(request: Request) -> str | None:

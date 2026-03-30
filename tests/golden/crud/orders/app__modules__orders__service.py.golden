@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import uuid4
 
 from app.application.dto.repository import QuerySpec
@@ -16,6 +17,23 @@ from app.modules.orders.schema import (
 class _OrdersRecord:
     id: str
     name: str
+    description: str | None
+    quantity: int
+    is_active: bool
+    parent_resource_id: str | None
+    due_at: datetime | None
+
+
+def _to_read(record: _OrdersRecord) -> OrdersRead:
+    return OrdersRead(
+        id=record.id,
+        name=record.name,
+        description=record.description,
+        quantity=record.quantity,
+        is_active=record.is_active,
+        parent_resource_id=record.parent_resource_id,
+        due_at=record.due_at,
+    )
 
 
 class OrdersService:
@@ -25,10 +43,18 @@ class OrdersService:
 
     async def create(self, payload: OrdersCreate, context: ValidationContext) -> ApiResponse:
         await self._validation.validate_or_raise(payload, context)
-        record = _OrdersRecord(id=str(uuid4()), name=payload.name)
+        record = _OrdersRecord(
+            id=str(uuid4()),
+            name=payload.name,
+            description=payload.description,
+            quantity=payload.quantity,
+            is_active=payload.is_active,
+            parent_resource_id=payload.parent_resource_id,
+            due_at=payload.due_at,
+        )
         self._items[record.id] = record
         return ApiResponse(
-            data=OrdersRead(id=record.id, name=record.name),
+            data=_to_read(record),
             message="Orders created",
             meta=_response_meta(context),
         )
@@ -40,7 +66,7 @@ class OrdersService:
         page_size = query.pagination.page_size
         page = values[offset : offset + page_size]
         return PaginatedApiResponse(
-            data=tuple(OrdersRead(id=item.id, name=item.name) for item in page),
+            data=tuple(_to_read(item) for item in page),
             pagination=PaginationMeta(total=len(values), page_size=page_size),
             message="Orders list",
             meta=_response_meta(context),
@@ -55,8 +81,18 @@ class OrdersService:
             return ApiResponse(success=False, data=None, message="Orders not found")
         if payload.name is not None:
             item.name = payload.name
+        if payload.description is not None:
+            item.description = payload.description
+        if payload.quantity is not None:
+            item.quantity = payload.quantity
+        if payload.is_active is not None:
+            item.is_active = payload.is_active
+        if payload.parent_resource_id is not None:
+            item.parent_resource_id = payload.parent_resource_id
+        if payload.due_at is not None:
+            item.due_at = payload.due_at
         return ApiResponse(
-            data=OrdersRead(id=item.id, name=item.name),
+            data=_to_read(item),
             message="Orders updated",
             meta=_response_meta(context),
         )

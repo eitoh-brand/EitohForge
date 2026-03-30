@@ -13,6 +13,7 @@ State values: `todo`, `in-progress`, `blocked`, `done`.
 - M6: enterprise layer (SSO/multi-tenant/plugins/feature flags)
 - M7: packaging, publishing, and operations readiness
 - M8: enterprise deployment and documentation closure
+- M9: blueprint depth completion (waves A–F, `P17-*`)
 
 ## Immediate Tracker (First 12 Tasks)
 
@@ -102,26 +103,47 @@ State values: `todo`, `in-progress`, `blocked`, `done`.
 | P14-01 | 13 | Security hardening review and remediation | 1.0d | P10-06,P13-02 | done | no critical findings open |
 | P14-02 | 13 | Performance baseline and regression checks | 1.0d | P11-02,P12-05 | done | baseline report published |
 | P14-03 | 13 | Final docs, cookbook, and release candidate prep | 1.0d | P14-01,P14-02 | done | `v0.1.0-rc` tagged |
-| P15-01 | 14 | Create `pyproject.toml` packaging layout and console entrypoint | 1.0d | P0-04,P14-03 | todo | build metadata validated |
-| P15-02 | 14 | Configure reproducible `wheel` + `sdist` build pipeline | 1.0d | P15-01 | todo | artifacts generated in CI |
-| P15-03 | 14 | Add internal registry publishing workflow and provenance metadata | 1.0d | P15-02 | todo | artifact publish verified |
-| P15-04 | 14 | Add optional PyPI release lane with guarded approvals | 0.5d | P15-03 | todo | dry-run release passes |
-| P15-05 | 14 | Add dependency audit, SBOM generation, and license checks | 1.0d | P15-02 | todo | security/compliance gates green |
-| P15-06 | 14 | Create operations runbook (deploy, rollback, SLO/error budget) | 1.0d | P14-03 | todo | runbook approved for prod use |
-| P16-01 | 15 | Define TLS strategy (ingress termination + cert rotation policy) | 1.0d | P15-06 | todo | TLS runbook approved |
-| P16-02 | 15 | Define optional mTLS for internal traffic and trust model | 1.0d | P16-01 | todo | mTLS design validated |
-| P16-03 | 15 | Define load balancing architecture and health-check routing | 1.0d | P15-06 | todo | LB policy documented and tested |
-| P16-04 | 15 | Define deployment strategy (rolling/blue-green/canary) and rollback controls | 1.0d | P15-06 | todo | deployment playbook approved |
-| P16-05 | 15 | Implement test closure suite (contract/e2e/migration/perf/security) | 1.0d | P14-02 | todo | all test classes active in CI |
-| P16-06 | 15 | Enforce test coverage threshold and flaky-test governance | 0.5d | P16-05 | todo | quality gates block regressions |
-| P16-07 | 15 | Build `example-minimal` reference application | 1.0d | P8-03 | todo | minimal example smoke tests pass |
-| P16-08 | 15 | Build `example-enterprise` full-feature application | 1.0d | P13-05,P12-05 | todo | enterprise example smoke tests pass |
-| P16-09 | 15 | Publish full usage docs (install/config/migrations/auth/plugins/deploy/troubleshooting) | 1.0d | P16-07,P16-08 | todo | docs complete and reviewed |
-| P16-10 | 15 | Documentation QA pass with onboarding simulation | 0.5d | P16-09 | todo | new-user success path validated |
+| P15-01 | 14 | Create `pyproject.toml` packaging layout and console entrypoint | 1.0d | P0-04,P14-03 | done | build metadata validated |
+| P15-02 | 14 | Configure reproducible `wheel` + `sdist` build pipeline | 1.0d | P15-01 | done | artifacts generated in CI |
+| P15-03 | 14 | Add internal registry publishing workflow and provenance metadata | 1.0d | P15-02 | done | artifact publish verified |
+| P15-04 | 14 | Add optional PyPI release lane with guarded approvals | 0.5d | P15-03 | done | dry-run release passes |
+| P15-05 | 14 | Add dependency audit, SBOM generation, and license checks | 1.0d | P15-02 | done | security/compliance gates green |
+| P15-06 | 14 | Create operations runbook (deploy, rollback, SLO/error budget) | 1.0d | P14-03 | done | runbook approved for prod use |
+| P16-01 | 15 | Define TLS strategy (ingress termination + cert rotation policy) | 1.0d | P15-06 | done | TLS runbook approved |
+| P16-02 | 15 | Define optional mTLS for internal traffic and trust model | 1.0d | P16-01 | done | mTLS design validated |
+| P16-03 | 15 | Define load balancing architecture and health-check routing | 1.0d | P15-06 | done | LB policy documented and tested |
+| P16-04 | 15 | Define deployment strategy (rolling/blue-green/canary) and rollback controls | 1.0d | P15-06 | done | deployment playbook approved |
+| P16-05 | 15 | Implement test closure suite (contract/e2e/migration/perf/security) | 1.0d | P14-02 | done | all test classes active in CI |
+| P16-06 | 15 | Enforce test coverage threshold and flaky-test governance | 0.5d | P16-05 | done | quality gates block regressions |
+| P16-07 | 15 | Build `example-minimal` reference application | 1.0d | P8-03 | done | minimal example smoke tests pass |
+| P16-08 | 15 | Build `example-enterprise` full-feature application | 1.0d | P13-05,P12-05 | done | enterprise example smoke tests pass |
+| P16-09 | 15 | Publish full usage docs (install/config/migrations/auth/plugins/deploy/troubleshooting) | 1.0d | P16-07,P16-08 | done | docs complete and reviewed |
+| P16-10 | 15 | Documentation QA pass with onboarding simulation | 0.5d | P16-09 | done | new-user success path validated |
+| P17-01 | 16 | Publish L1/L2/L3 acceptance definitions per wave; template for appendix updates | 0.5d | P16-10 | done | §11 in `blueprint-completion-waves.md` + L1/L2/L3 table |
+| P17-02 | 16 | Add SQLite `DatabaseProvider` + factory/settings + CI job using SQLite | 1.0d | P17-01 | done | unit tests exercise `:memory:` + file path; scaffold templates aligned |
+| P17-03 | 16 | Add MySQL (or second SQL) `DatabaseProvider` + factory wiring + docs | 1.0d | P17-02 | done | `MySQLProvider` + `pymysql`; templates + unit tests |
+| P17-04 | 16 | Query/spec parity: document supported ops; implement + test remaining `QuerySpec` → SQL path | 1.5d | P17-01 | done | `query-spec-reference.md`, validation helper, empty `in`, operator tests |
+| P17-05 | 16 | CRUD generator breadth (field types, relations stub) + golden template tests | 2.0d | P17-04 | done | richer `schema`/`service`/tests; goldens refreshed |
+| P17-06 | 16 | Versioned API L2: OpenAPI per version + deprecation headers + example app path | 1.0d | P17-05 | done | `ApiVersioningSettings`, middleware in `build_forge_app`, cookbook §7–8 |
+| P17-07 | 16 | Event bus L2: pub/sub contract + optional Redis adapter + integration test | 2.0d | P17-01 | done | `RedisPublishingEventBus` + `build_redis_publishing_event_bus`, cookbook §9, unit test |
+| P17-08 | 16 | Realtime L3: Redis-backed socket hub for multi-worker | 2.0d | P17-07 | done | `RedisFanoutSocketHub`, lifespan subscriber in `build_forge_app`, cookbook §6, `redis` dependency |
+| P17-09 | 16 | Realtime: private/direct channels OR documented app-level pattern + API clarity | 1.0d | P17-08 | done | `direct` protocol + `direct_to_actor_supported` in capabilities; `realtime-websocket.md` non-goals |
+| P17-10 | 16 | Secret management L2: Vault or cloud provider behind secret contract | 1.5d | P17-01 | done | `VaultSecretProvider` (SDK) + `build_secret_provider(vault)`; unit test parses mocked KV v2 JSON |
+| P17-11 | 16 | Observability L2: OTEL and/or Prometheus export behind settings flags | 1.5d | P17-01 | done | `PrometheusMetricsSink` + `/metrics`, OTEL tracer provider wired; unit tests validate both |
+| P17-12 | 16 | After each wave: update architecture appendix + optional matrix Depth column | 0.5d | - | done | architecture appendix + depth column updated for rows affected by P17-05/06/07/08/09/10/11 |
+| P18-01 | 18 | Tenant DB schema isolation (search_path / translate map) | 2.0d | P13-03 | done | Tenant schema isolation enabled via `EITOHFORGE_TENANT_DB_SCHEMA_ISOLATION_ENABLED`; SQLAlchemy sets Postgres `search_path` + unit test |
+| P18-02 | 18 | Tenant cache namespace: enforce/test prefix contract | 1.0d | P13-03 | done | `TenantScopedCacheProvider` namespaces keys + avoids double-prefix + unit tests |
+| P18-03 | 18 | Tenant storage prefix: enforce/test key + presign contract | 1.0d | P13-03 | done | `TenantScopedStorageProvider` prefixes keys + presigned URLs use tenant-prefixed keys + unit tests |
+| P18-04 | 18 | Tenant SSO mapping isolation (tenant-aware link store) | 1.5d | P13-01 | done | SSO link store keyed by `(provider, tenant_id, external_subject)` + broker resolves/upserts tenant-specifically + tests |
+| P18-05 | 18 | Expose tenant runtime contract (`TenantContext.current()`) | 0.5d | P18-02,P18-03 | done | `/sdk/capabilities` exposes `tenant_context_current_available` + field list |
+| P18-06 | 18 | TenantContext contextvar propagation tests (async tasks) | 0.5d | P13-03 | done | unit test verifies `TenantContext.current()` visible inside `asyncio.create_task` spawned during request |
+| P18-07 | 18 | Phase-18 traceability: update appendix + coverage Depth rows | 0.5d | - | done | `secure_backend_sdk_architecture.md` + coverage matrix depth updated for Phase 18 tenant runtime components |
 
 ## Critical Path
 
 `P0-01 -> P0-03 -> P1-02 -> P2-03 -> P3-03 -> P4-04 -> P5-04 -> P6-02 -> P7-02 -> P8-03 -> P10-04 -> P14-03 -> P15-03 -> P16-09`
+
+**Blueprint depth (post-baseline):** `P17-01 -> P17-02 -> P17-04 -> P17-05 -> P17-07 -> P17-08 -> P17-10` (see `blueprint-completion-waves.md`; `P17-03`, `P17-06`, `P17-09`, `P17-11` parallel where possible).
 
 ## Weekly Reporting Template
 

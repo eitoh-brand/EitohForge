@@ -26,6 +26,7 @@ class TemplateContext:
 
     project_name: str
     package_name: str
+    forge_profile: str = "standard"
 
 
 PROJECT_FILE_TEMPLATES: dict[str, str] = {
@@ -58,6 +59,23 @@ addopts = "-q"
     ".env.example": """EITOHFORGE_APP_NAME={{ project_name }}
 EITOHFORGE_APP_ENV=local
 EITOHFORGE_LOG_LEVEL=INFO
+EITOHFORGE_RUNTIME_PUBLIC_BASE_URL=
+EITOHFORGE_RUNTIME_CORS_ALLOW_ORIGINS=
+EITOHFORGE_RUNTIME_CORS_ALLOW_CREDENTIALS=false
+EITOHFORGE_RUNTIME_TRUST_FORWARDED_HEADERS=false
+EITOHFORGE_RUNTIME_DEFAULT_BIND_HOST=127.0.0.1
+EITOHFORGE_RUNTIME_DEFAULT_BIND_PORT=8000
+EITOHFORGE_RUNTIME_ENFORCE_HTTPS_REDIRECT=false
+{% if forge_profile == "minimal" %}
+# forge_profile=minimal — enable features below as needed (see docs/guides/forge-profiles.md)
+EITOHFORGE_AUTH_JWT_ENABLED=true
+EITOHFORGE_REALTIME_ENABLED=false
+EITOHFORGE_REALTIME_REQUIRE_ACCESS_JWT=true
+{% else %}
+EITOHFORGE_AUTH_JWT_ENABLED=true
+EITOHFORGE_REALTIME_ENABLED=true
+EITOHFORGE_REALTIME_REQUIRE_ACCESS_JWT=true
+{% endif %}
 EITOHFORGE_DB_DRIVER=postgresql+psycopg
 EITOHFORGE_DB_HOST=localhost
 EITOHFORGE_DB_PORT=5432
@@ -84,12 +102,20 @@ EITOHFORGE_AUTH_REFRESH_TOKEN_DAYS=7
 EITOHFORGE_CACHE_PROVIDER=redis
 EITOHFORGE_CACHE_REDIS_URL=redis://localhost:6379/0
 EITOHFORGE_CACHE_DEFAULT_TTL_SECONDS=60
+{% if forge_profile == "minimal" %}
+EITOHFORGE_RATE_LIMIT_ENABLED=false
+{% else %}
 EITOHFORGE_RATE_LIMIT_ENABLED=true
+{% endif %}
 EITOHFORGE_RATE_LIMIT_MAX_REQUESTS=120
 EITOHFORGE_RATE_LIMIT_WINDOW_SECONDS=60
 EITOHFORGE_RATE_LIMIT_KEY_HEADERS=x-actor-id,x-forwarded-for,x-real-ip
 EITOHFORGE_RATE_LIMIT_SCOPE_PATH_PREFIX=
+{% if forge_profile == "minimal" %}
+EITOHFORGE_IDEMPOTENCY_ENABLED=false
+{% else %}
 EITOHFORGE_IDEMPOTENCY_ENABLED=true
+{% endif %}
 EITOHFORGE_IDEMPOTENCY_HEADER_NAME=idempotency-key
 EITOHFORGE_IDEMPOTENCY_TTL_SECONDS=86400
 EITOHFORGE_IDEMPOTENCY_WRITE_METHODS=POST,PUT,PATCH,DELETE
@@ -105,13 +131,24 @@ EITOHFORGE_REQUEST_SIGNING_ALLOWED_SKEW_SECONDS=300
 EITOHFORGE_REQUEST_SIGNING_NONCE_TTL_SECONDS=300
 EITOHFORGE_REQUEST_SIGNING_METHODS=POST,PUT,PATCH,DELETE
 EITOHFORGE_REQUEST_SIGNING_SCOPE_PATH_PREFIX=
+{% if forge_profile == "minimal" %}
+EITOHFORGE_OBSERVABILITY_ENABLED=false
+EITOHFORGE_OBSERVABILITY_ENABLE_METRICS=false
+EITOHFORGE_OBSERVABILITY_ENABLE_LOGGING=false
+EITOHFORGE_OBSERVABILITY_ENABLE_TRACING=false
+{% else %}
 EITOHFORGE_OBSERVABILITY_ENABLED=true
 EITOHFORGE_OBSERVABILITY_ENABLE_METRICS=true
 EITOHFORGE_OBSERVABILITY_ENABLE_LOGGING=true
 EITOHFORGE_OBSERVABILITY_ENABLE_TRACING=true
+{% endif %}
 EITOHFORGE_OBSERVABILITY_TRACE_HEADER=x-trace-id
 EITOHFORGE_OBSERVABILITY_REQUEST_ID_HEADER=x-request-id
+{% if forge_profile == "minimal" %}
+EITOHFORGE_AUDIT_ENABLED=false
+{% else %}
 EITOHFORGE_AUDIT_ENABLED=true
+{% endif %}
 EITOHFORGE_AUDIT_METHODS=POST,PUT,PATCH,DELETE
 EITOHFORGE_AUDIT_SCOPE_PATH_PREFIX=
 EITOHFORGE_SEARCH_ENABLED=false
@@ -121,13 +158,26 @@ EITOHFORGE_SEARCH_INDEX_PREFIX={{ package_name }}
 EITOHFORGE_SEARCH_USERNAME=
 EITOHFORGE_SEARCH_PASSWORD=
 EITOHFORGE_SEARCH_VERIFY_TLS=true
+{% if forge_profile == "minimal" %}
+EITOHFORGE_TENANT_ENABLED=false
+EITOHFORGE_TENANT_REQUIRED_FOR_WRITE_METHODS=false
+{% else %}
 EITOHFORGE_TENANT_ENABLED=true
 EITOHFORGE_TENANT_REQUIRED_FOR_WRITE_METHODS=true
+{% endif %}
 EITOHFORGE_TENANT_WRITE_METHODS=POST,PUT,PATCH,DELETE
 EITOHFORGE_TENANT_SCOPE_PATH_PREFIX=
 EITOHFORGE_TENANT_RESOURCE_TENANT_HEADER=x-resource-tenant-id
+# Optional per-tenant Postgres schema isolation (`search_path`) for SQL databases.
+EITOHFORGE_TENANT_DB_SCHEMA_ISOLATION_ENABLED=false
+EITOHFORGE_TENANT_DB_SCHEMA_NAME_TEMPLATE={tenant_id}
+{% if forge_profile == "minimal" %}
+EITOHFORGE_PLUGIN_ENABLED=false
+EITOHFORGE_FEATURE_FLAGS_ENABLED=false
+{% else %}
 EITOHFORGE_PLUGIN_ENABLED=true
 EITOHFORGE_FEATURE_FLAGS_ENABLED=true
+{% endif %}
 EITOHFORGE_FEATURE_FLAGS_ENDPOINT_PATH=/sdk/feature-flags
 EITOHFORGE_SECURITY_HARDENING_ENABLED=true
 EITOHFORGE_SECURITY_HARDENING_MAX_REQUEST_BYTES=2097152
@@ -146,13 +196,27 @@ EITOHFORGE_STORAGE_CDN_BASE_URL=
 EITOHFORGE_SECRET_PROVIDER=env
 EITOHFORGE_SECRET_VAULT_MOUNT=secret
 """,
+    "forge.dev.json": """{
+  "schema_version": 1,
+  "default_host": "127.0.0.1",
+  "services": [
+    {
+      "name": "api",
+      "module": "{{ package_name }}.main:app",
+      "port": 8000
+    }
+  ]
+}
+""",
     "app/__init__.py": "",
     "app/main.py": """from fastapi import FastAPI
 
 from app.core.capabilities import register_capabilities_endpoint
+from app.core.config import get_settings
 from app.core.feature_flags import register_feature_flags_endpoint
 from app.core.middleware import register_middleware
 from app.core.versioning import ApiVersion, register_versioned_routers
+from app.presentation.routers.realtime import register_socket_state, router as realtime_router
 from app.presentation.routers.v1.admin import router as v1_admin_router
 from app.presentation.routers.v1.health import router as v1_health_router
 from app.presentation.routers.v1.tenant import router as v1_tenant_router
@@ -173,6 +237,9 @@ def create_app() -> FastAPI:
         },
     )
     app.include_router(health_router)
+    if get_settings().realtime.enabled:
+        register_socket_state(app)
+        app.include_router(realtime_router)
     return app
 
 
@@ -326,6 +393,7 @@ class RepositoryContract(Protocol, Generic[TEntity, TCreate, TUpdate]):
     "app/infrastructure/database/provider.py": """from __future__ import annotations
 
 import importlib
+import sqlite3
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -385,6 +453,76 @@ class PostgresProvider:
             raise RuntimeError(
                 "Postgres provider requires 'psycopg'. Install it with: pip install psycopg[binary]"
             ) from exc
+
+
+@dataclass
+class MySQLProvider:
+    settings: DatabaseSettings
+    connect_timeout_seconds: int = 5
+    name: str = "mysql"
+
+    def dsn(self) -> str:
+        return self.settings.sqlalchemy_url
+
+    def connect(self) -> Any:
+        pymysql = self._load_pymysql()
+        db = self.settings
+        return pymysql.connect(
+            host=db.host,
+            port=db.port,
+            user=db.username,
+            password=db.password,
+            database=db.name,
+            connect_timeout=self.connect_timeout_seconds,
+        )
+
+    def ping(self) -> bool:
+        try:
+            connection = self.connect()
+            try:
+                cursor = connection.cursor()
+                cursor.execute("SELECT 1")
+                cursor.close()
+            finally:
+                connection.close()
+        except Exception:
+            return False
+        return True
+
+    @staticmethod
+    def _load_pymysql() -> Any:
+        try:
+            return importlib.import_module("pymysql")
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                "MySQL provider requires 'pymysql'. Install it with: pip install pymysql"
+            ) from exc
+
+
+@dataclass
+class SqliteProvider:
+    settings: DatabaseSettings
+    name: str = "sqlite"
+
+    def dsn(self) -> str:
+        return self.settings.sqlalchemy_url
+
+    def connect(self) -> sqlite3.Connection:
+        db = self.settings.name.strip()
+        if db == ":memory:":
+            return sqlite3.connect(":memory:")
+        return sqlite3.connect(db)
+
+    def ping(self) -> bool:
+        try:
+            connection = self.connect()
+            try:
+                connection.execute("SELECT 1").fetchone()
+            finally:
+                connection.close()
+        except Exception:
+            return False
+        return True
 """,
     "app/infrastructure/database/registry.py": """from __future__ import annotations
 
@@ -409,7 +547,12 @@ class DatabaseRegistry:
         return role in self._providers
 """,
     "app/infrastructure/database/factory.py": """from app.core.config import AppSettings
-from app.infrastructure.database.provider import DatabaseProvider, PostgresProvider
+from app.infrastructure.database.provider import (
+    DatabaseProvider,
+    MySQLProvider,
+    PostgresProvider,
+    SqliteProvider,
+)
 from app.infrastructure.database.registry import DatabaseRegistry
 
 
@@ -417,6 +560,10 @@ def build_database_provider(settings: AppSettings) -> DatabaseProvider:
     driver = settings.database.driver.lower()
     if driver.startswith("postgresql"):
         return PostgresProvider(settings=settings.database)
+    if driver.startswith("mysql"):
+        return MySQLProvider(settings=settings.database)
+    if driver.startswith("sqlite"):
+        return SqliteProvider(settings=settings.database)
     raise ValueError(f"Unsupported database driver: {settings.database.driver}")
 
 
@@ -425,11 +572,19 @@ def _build_provider_from_role(settings: AppSettings, role: str) -> DatabaseProvi
         driver = settings.database_analytics.driver.lower()
         if driver.startswith("postgresql"):
             return PostgresProvider(settings=settings.database_analytics)
+        if driver.startswith("mysql"):
+            return MySQLProvider(settings=settings.database_analytics)
+        if driver.startswith("sqlite"):
+            return SqliteProvider(settings=settings.database_analytics)
         raise ValueError(f"Unsupported analytics database driver: {settings.database_analytics.driver}")
     if role == "search":
         driver = settings.database_search.driver.lower()
         if driver.startswith("postgresql"):
             return PostgresProvider(settings=settings.database_search)
+        if driver.startswith("mysql"):
+            return MySQLProvider(settings=settings.database_search)
+        if driver.startswith("sqlite"):
+            return SqliteProvider(settings=settings.database_search)
         raise ValueError(f"Unsupported search database driver: {settings.database_search.driver}")
     raise ValueError(f"Unsupported database role: {role}")
 
@@ -497,16 +652,19 @@ class Base(DeclarativeBase):
     "app/infrastructure/repositories/__init__.py": "",
     "app/infrastructure/repositories/sqlalchemy_repository.py": """from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from dataclasses import asdict, is_dataclass
 from datetime import datetime
 from typing import Any, Callable, Generic, Mapping, TypeVar
 from uuid import uuid4
 
-from sqlalchemy import Select, func, inspect, select
+from sqlalchemy import Select, func, inspect, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.application.dto.repository import PaginationMode, QuerySpec, RepositoryContext, SortDirection, SortSpec
+from app.core.config import get_settings
+from app.core.tenant import TenantContext
 from app.domain.repositories.contracts import PageResult, RepositoryContract
 
 
@@ -518,6 +676,8 @@ TUpdate = TypeVar("TUpdate")
 class SQLAlchemyRepository(
     Generic[TEntity, TCreate, TUpdate], RepositoryContract[TEntity, TCreate, TUpdate]
 ):
+    _SCHEMA_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
     def __init__(
         self,
         *,
@@ -535,6 +695,9 @@ class SQLAlchemyRepository(
         self._update_to_values = update_to_values or self._payload_to_values
         self._id_field = id_field
         self._columns = set(inspect(self._model_type).columns.keys())
+        settings = get_settings()
+        self._tenant_schema_isolation_enabled = settings.tenant.db_schema_isolation_enabled
+        self._tenant_schema_name_template = settings.tenant.db_schema_name_template
 
     async def create(self, payload: TCreate, context: RepositoryContext | None = None) -> TEntity:
         values = self._create_to_values(payload)
@@ -542,6 +705,7 @@ class SQLAlchemyRepository(
         if self._id_field in self._columns and self._id_field not in values:
             values[self._id_field] = str(uuid4())
         with self._session_factory() as session:
+            self._apply_tenant_schema_isolation(session, context)
             model = self._model_type(**values)
             session.add(model)
             session.commit()
@@ -550,6 +714,7 @@ class SQLAlchemyRepository(
 
     async def get(self, entity_id: str, context: RepositoryContext | None = None) -> TEntity | None:
         with self._session_factory() as session:
+            self._apply_tenant_schema_isolation(session, context)
             statement = self._base_statement(context).where(
                 getattr(self._model_type, self._id_field) == entity_id
             )
@@ -564,6 +729,7 @@ class SQLAlchemyRepository(
         values = self._update_to_values(payload)
         values = self._apply_write_context(values, context, is_create=False)
         with self._session_factory() as session:
+            self._apply_tenant_schema_isolation(session, context)
             statement = self._base_statement(context).where(
                 getattr(self._model_type, self._id_field) == entity_id
             )
@@ -579,6 +745,7 @@ class SQLAlchemyRepository(
 
     async def delete(self, entity_id: str, context: RepositoryContext | None = None) -> bool:
         with self._session_factory() as session:
+            self._apply_tenant_schema_isolation(session, context)
             statement = self._base_statement(context).where(
                 getattr(self._model_type, self._id_field) == entity_id
             )
@@ -593,6 +760,7 @@ class SQLAlchemyRepository(
         self, query: QuerySpec, context: RepositoryContext | None = None
     ) -> tuple[TEntity, ...]:
         with self._session_factory() as session:
+            self._apply_tenant_schema_isolation(session, context)
             statement = self._apply_query(self._base_statement(context), query)
             statement = self._apply_pagination(statement, query)
             models = session.scalars(statement).all()
@@ -602,6 +770,7 @@ class SQLAlchemyRepository(
         self, query: QuerySpec, context: RepositoryContext | None = None
     ) -> PageResult[TEntity]:
         with self._session_factory() as session:
+            self._apply_tenant_schema_isolation(session, context)
             base_statement = self._base_statement(context)
             count_statement = select(func.count()).select_from(base_statement.subquery())
             total = int(session.scalar(count_statement) or 0)
@@ -622,6 +791,7 @@ class SQLAlchemyRepository(
         self, payloads: tuple[TCreate, ...], context: RepositoryContext | None = None
     ) -> tuple[TEntity, ...]:
         with self._session_factory() as session:
+            self._apply_tenant_schema_isolation(session, context)
             models: list[Any] = []
             for payload in payloads:
                 values = self._apply_write_context(self._create_to_values(payload), context, is_create=True)
@@ -635,10 +805,39 @@ class SQLAlchemyRepository(
                 session.refresh(model)
             return tuple(self._to_entity(model) for model in models)
 
+    def _resolve_tenant_id_for_scope(self, context: RepositoryContext | None) -> str | None:
+        if context is not None and context.tenant_id is not None:
+            return context.tenant_id
+        return TenantContext.current().tenant_id
+
+    def _apply_tenant_schema_isolation(
+        self,
+        session: Session,
+        context: RepositoryContext | None,
+    ) -> None:
+        if not self._tenant_schema_isolation_enabled:
+            return
+
+        tenant_id = self._resolve_tenant_id_for_scope(context)
+        if tenant_id is None:
+            return
+
+        bind = session.get_bind()
+        dialect_name = getattr(getattr(bind, "dialect", None), "name", None)
+        if dialect_name not in {"postgresql"}:
+            return
+
+        schema_name = self._tenant_schema_name_template.format(tenant_id=str(tenant_id).strip())
+        if not self._SCHEMA_NAME_RE.match(schema_name):
+            raise ValueError(f"Invalid tenant schema name resolved from tenant_id={tenant_id!r}.")
+
+        session.execute(f'SET LOCAL search_path TO "{schema_name}"')
+
     def _base_statement(self, context: RepositoryContext | None) -> Select[Any]:
         statement = select(self._model_type)
-        if context is not None and context.tenant_id is not None and "tenant_id" in self._columns:
-            statement = statement.where(getattr(self._model_type, "tenant_id") == context.tenant_id)
+        tenant_id = context.tenant_id if context is not None and context.tenant_id is not None else TenantContext.current().tenant_id
+        if tenant_id is not None and "tenant_id" in self._columns:
+            statement = statement.where(getattr(self._model_type, "tenant_id") == tenant_id)
         return statement
 
     def _apply_query(self, statement: Select[Any], query: QuerySpec) -> Select[Any]:
@@ -693,16 +892,16 @@ class SQLAlchemyRepository(
     def _apply_write_context(
         self, values: dict[str, Any], context: RepositoryContext | None, *, is_create: bool
     ) -> dict[str, Any]:
-        if context is None:
-            return values
         scoped = dict(values)
-        if context.tenant_id is not None and "tenant_id" in self._columns and "tenant_id" not in scoped:
-            scoped["tenant_id"] = context.tenant_id
-        if context.actor_id is not None:
+        tenant_id = context.tenant_id if context is not None and context.tenant_id is not None else TenantContext.current().tenant_id
+        actor_id = context.actor_id if context is not None and context.actor_id is not None else TenantContext.current().actor_id
+        if tenant_id is not None and "tenant_id" in self._columns and "tenant_id" not in scoped:
+            scoped["tenant_id"] = tenant_id
+        if actor_id is not None:
             if is_create and "created_by" in self._columns and "created_by" not in scoped:
-                scoped["created_by"] = context.actor_id
+                scoped["created_by"] = actor_id
             if "updated_by" in self._columns:
-                scoped["updated_by"] = context.actor_id
+                scoped["updated_by"] = actor_id
         return scoped
 
     @staticmethod
@@ -1005,6 +1204,67 @@ def test_health_endpoint() -> None:
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 """,
+    "tests/test_realtime_ws.py": """from datetime import timedelta
+
+from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
+
+from app.core.auth import JwtTokenManager
+from app.core.config import get_settings
+from app.main import app
+
+
+def _access_token() -> str:
+    s = get_settings()
+    mgr = JwtTokenManager(
+        secret=s.auth.jwt_secret,
+        access_ttl=timedelta(minutes=s.auth.access_token_minutes),
+        refresh_ttl=timedelta(days=s.auth.refresh_token_days),
+    )
+    return mgr.issue_token_pair(subject="ws-tester", tenant_id="tenant-ws").access_token
+
+
+def test_realtime_ws_handshake_and_ping() -> None:
+    client = TestClient(app)
+    token = _access_token()
+    with client.websocket_connect(f"/realtime/ws?token={token}") as ws:
+        hello = ws.receive_json()
+        assert hello["type"] == "connected"
+        assert hello["actor_id"] == "ws-tester"
+        ws.send_json({"type": "ping"})
+        assert ws.receive_json() == {"type": "pong"}
+
+
+def test_realtime_ws_rejects_missing_token() -> None:
+    client = TestClient(app)
+    try:
+        with client.websocket_connect("/realtime/ws"):
+            pass
+    except WebSocketDisconnect as exc:
+        assert exc.code == 1008
+    else:
+        raise AssertionError("expected disconnect")
+
+
+def test_realtime_ws_join_broadcast() -> None:
+    client = TestClient(app)
+    token = _access_token()
+    with client.websocket_connect(f"/realtime/ws?token={token}") as a:
+        assert a.receive_json()["type"] == "connected"
+        with client.websocket_connect(f"/realtime/ws?token={token}") as b:
+            assert b.receive_json()["type"] == "connected"
+            a.send_json({"type": "join", "room": "room.demo"})
+            assert a.receive_json()["type"] == "joined"
+            b.send_json({"type": "join", "room": "room.demo"})
+            assert b.receive_json()["type"] == "joined"
+            a.send_json({"type": "broadcast", "room": "room.demo", "event": "demo.evt", "payload": {"x": 1}})
+            got_b = b.receive_json()
+            got_a = a.receive_json()
+            assert got_b["event"] == "demo.evt"
+            assert got_b["payload"] == {"x": 1}
+            assert got_a["type"] == "broadcast_result"
+            assert got_a["delivered"] == 1
+""",
     "alembic.ini": """[alembic]
 script_location = migrations
 prepend_sys_path = .
@@ -1175,9 +1435,11 @@ addopts = "-q"
     InMemoryMetricsSink,
     MetricsSink,
     ObservabilityRule,
+    PrometheusMetricsSink,
     get_request_id,
     get_request_trace_id,
     register_observability_middleware,
+    register_prometheus_metrics_endpoint,
 )
 """,
     "app/core/audit.py": """from eitohforge_sdk.core.audit import (
@@ -1212,6 +1474,18 @@ addopts = "-q"
     SecurityHardeningRule,
     register_security_hardening_middleware,
 )
+""",
+    "app/presentation/routers/realtime.py": """# SDK-first: shared WebSocket router (toggle via EITOHFORGE_REALTIME_* / AUTH_JWT_*).
+from __future__ import annotations
+
+from app.core.config import get_settings
+from eitohforge_sdk.infrastructure.sockets.realtime_router import (
+    attach_in_memory_socket_hub,
+    build_realtime_router,
+)
+
+router = build_realtime_router(settings_provider=get_settings)
+register_socket_state = attach_in_memory_socket_hub
 """,
     "app/core/capabilities.py": """from collections.abc import Callable
 
@@ -1371,10 +1645,12 @@ def _resolve_templates(mode: ScaffoldMode) -> dict[str, str]:
     return PROJECT_FILE_TEMPLATES
 
 
-def build_context(project_name: str) -> TemplateContext:
+def build_context(project_name: str, *, forge_profile: str = "standard") -> TemplateContext:
     """Build a rendering context from a project name."""
     package_name = re.sub(r"[^a-zA-Z0-9_]", "_", project_name.lower())
-    return TemplateContext(project_name=project_name, package_name=package_name)
+    return TemplateContext(
+        project_name=project_name, package_name=package_name, forge_profile=forge_profile
+    )
 
 
 def render_project(project_dir: Path, context: TemplateContext, *, mode: ScaffoldMode = "sdk") -> None:
@@ -1386,6 +1662,7 @@ def render_project(project_dir: Path, context: TemplateContext, *, mode: Scaffol
         content = Template(raw_template).render(
             project_name=context.project_name,
             package_name=context.package_name,
+            forge_profile=context.forge_profile,
         )
         destination.write_text(content, encoding="utf-8")
 

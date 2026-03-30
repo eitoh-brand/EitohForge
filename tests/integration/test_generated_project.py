@@ -2,12 +2,14 @@ import importlib
 from pathlib import Path
 import sys
 
+import pytest
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
 from eitohforge_cli.main import app
 
 
+@pytest.mark.e2e
 def test_generated_project_main_imports_and_exposes_health_route() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -18,6 +20,7 @@ def test_generated_project_main_imports_and_exposes_health_route() -> None:
         assert (Path("my_service/tests/test_orders_crud.py")).exists()
 
         project_root = Path("my_service").resolve()
+        assert (project_root / "forge.dev.json").exists()
         pyproject = (project_root / "pyproject.toml").read_text(encoding="utf-8")
         middleware_py = (project_root / "app" / "core" / "middleware.py").read_text(encoding="utf-8")
         assert "eitohforge-sdk" in pyproject
@@ -83,6 +86,7 @@ def test_generated_project_main_imports_and_exposes_health_route() -> None:
             sockets_contracts_module = importlib.import_module("app.infrastructure.sockets.contracts")
             sockets_auth_module = importlib.import_module("app.infrastructure.sockets.auth")
             sockets_hub_module = importlib.import_module("app.infrastructure.sockets.hub")
+            realtime_router_module = importlib.import_module("app.presentation.routers.realtime")
             webhooks_contracts_module = importlib.import_module("app.infrastructure.webhooks.contracts")
             webhooks_dispatcher_module = importlib.import_module("app.infrastructure.webhooks.dispatcher")
             webhooks_signing_module = importlib.import_module("app.infrastructure.webhooks.signing")
@@ -103,6 +107,7 @@ def test_generated_project_main_imports_and_exposes_health_route() -> None:
             assert "/v1/admin/ping" in route_paths
             assert "/v1/tenant/{resource_tenant_id}/ping" in route_paths
             assert "/v2/health" in route_paths
+            assert "/realtime/ws" in route_paths
             settings = config_module.AppSettings()
             assert settings.cache.provider == "redis"
             assert settings.storage.provider == "local"
@@ -147,6 +152,7 @@ def test_generated_project_main_imports_and_exposes_health_route() -> None:
             assert hasattr(sockets_contracts_module, "SocketPrincipal")
             assert hasattr(sockets_auth_module, "JwtSocketAuthenticator")
             assert hasattr(sockets_hub_module, "InMemorySocketHub")
+            assert hasattr(realtime_router_module, "register_socket_state")
             assert hasattr(webhooks_contracts_module, "WebhookTransport")
             assert hasattr(webhooks_dispatcher_module, "WebhookDispatcher")
             assert hasattr(webhooks_signing_module, "compute_webhook_signature")

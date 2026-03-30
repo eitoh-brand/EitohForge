@@ -3,6 +3,10 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.migration
+
 
 def _load_module():
     script_path = Path(__file__).resolve().parents[2] / "scripts" / "check_migration_policy.py"

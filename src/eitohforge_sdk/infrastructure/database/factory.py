@@ -1,13 +1,22 @@
 """Database provider factory."""
 
 from eitohforge_sdk.core.config import AppSettings, DatabaseSettings
-from eitohforge_sdk.infrastructure.database.providers import DatabaseProvider, PostgresProvider
+from eitohforge_sdk.infrastructure.database.providers import (
+    DatabaseProvider,
+    MySQLProvider,
+    PostgresProvider,
+    SqliteProvider,
+)
 from eitohforge_sdk.infrastructure.database.registry import DatabaseRegistry
 
 
 def _build_provider_for_driver(driver: str, settings: DatabaseSettings) -> DatabaseProvider:
     if driver.startswith("postgresql"):
         return PostgresProvider(settings=settings)
+    if driver.startswith("mysql"):
+        return MySQLProvider(settings=settings)
+    if driver.startswith("sqlite"):
+        return SqliteProvider(settings=settings)
     raise ValueError(f"Unsupported database driver: {driver}")
 
 

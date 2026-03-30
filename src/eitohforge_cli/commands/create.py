@@ -38,6 +38,11 @@ def create_project(
         "--mode",
         help="Scaffold mode: 'sdk' (SDK-first) or 'standalone' (self-contained).",
     ),
+    profile: Literal["standard", "minimal"] = typer.Option(
+        "standard",
+        "--profile",
+        help="Env defaults: 'standard' (most platform features on) or 'minimal' (opt-in via EITOHFORGE_*).",
+    ),
 ) -> None:
     """Create a new layered backend project scaffold."""
     _validate_project_name(project_name)
@@ -50,8 +55,8 @@ def create_project(
         raise typer.BadParameter(f"Directory already exists: {project_dir}")
 
     project_dir.mkdir(parents=True, exist_ok=False)
-    render_project(project_dir, build_context(project_name), mode=mode)
-    typer.echo(f"Project scaffold created at: {project_dir} (mode={mode})")
+    render_project(project_dir, build_context(project_name, forge_profile=profile), mode=mode)
+    typer.echo(f"Project scaffold created at: {project_dir} (mode={mode}, profile={profile})")
 
 
 @create_app.command("crud")

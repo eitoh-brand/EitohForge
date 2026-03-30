@@ -1,5 +1,6 @@
 """Core SDK modules."""
 
+from eitohforge_sdk.core.api_version_deprecation import register_api_version_deprecation_middleware
 from eitohforge_sdk.core.api_versioning import ApiVersion, build_versioned_router, register_versioned_routers
 from eitohforge_sdk.core.audit import (
     AuditEvent,
@@ -61,6 +62,19 @@ from eitohforge_sdk.core.capabilities import (
     build_capability_profile,
     register_capabilities_endpoint,
 )
+from eitohforge_sdk.core.deployment import EnvironmentBehavior, resolve_environment_behavior
+from eitohforge_sdk.core.feature_catalog import (
+    FORGE_FEATURE_CATALOG,
+    FeatureArea,
+    list_feature_catalog,
+)
+from eitohforge_sdk.core.forge_application import ForgeAppBuildConfig, build_forge_app
+from eitohforge_sdk.core.forge_toggles import (
+    ForgePlatformToggles,
+    default_forge_platform_toggles,
+    effective_feature,
+    forge_platform_toggles_uniform,
+)
 from eitohforge_sdk.core.error_middleware import register_error_handlers
 from eitohforge_sdk.core.error_registry import ErrorDefinition, ErrorRegistry, build_default_error_registry
 from eitohforge_sdk.core.feature_flags import (
@@ -80,9 +94,11 @@ from eitohforge_sdk.core.observability import (
     InMemoryMetricsSink,
     MetricsSink,
     ObservabilityRule,
+    PrometheusMetricsSink,
     get_request_id,
     get_request_trace_id,
     register_observability_middleware,
+    register_prometheus_metrics_endpoint,
 )
 from eitohforge_sdk.core.performance import BenchmarkMetric, detect_regressions, run_micro_benchmarks
 from eitohforge_sdk.core.rate_limit import InMemoryRateLimiter, RateLimitRule, register_rate_limiter_middleware
@@ -131,6 +147,14 @@ __all__ = [
     "AccessPolicy",
     "ActorPresentPolicy",
     "CapabilityFeatureFlags",
+    "EnvironmentBehavior",
+    "FeatureArea",
+    "FORGE_FEATURE_CATALOG",
+    "ForgeAppBuildConfig",
+    "ForgePlatformToggles",
+    "default_forge_platform_toggles",
+    "effective_feature",
+    "forge_platform_toggles_uniform",
     "ErrorDefinition",
     "ErrorRegistry",
     "FeatureFlagDefinition",
@@ -152,6 +176,7 @@ __all__ = [
     "OidcExchangeError",
     "InMemoryRateLimiter",
     "InMemoryMetricsSink",
+    "PrometheusMetricsSink",
     "PolicyContext",
     "PolicyDeniedError",
     "PolicyEngine",
@@ -201,9 +226,12 @@ __all__ = [
     "assert_roles",
     "log_audit_event",
     "build_capability_profile",
+    "build_forge_app",
     "build_security_context_from_headers",
     "require_policies",
     "build_session_store",
+    "list_feature_catalog",
+    "resolve_environment_behavior",
     "build_versioned_router",
     "build_default_error_registry",
     "get_request_security_context",
@@ -214,10 +242,12 @@ __all__ = [
     "rbac_required",
     "register_capabilities_endpoint",
     "register_audit_middleware",
+    "register_api_version_deprecation_middleware",
     "register_versioned_routers",
     "register_idempotency_middleware",
     "register_health_endpoints",
     "register_observability_middleware",
+    "register_prometheus_metrics_endpoint",
     "register_request_signing_middleware",
     "register_rate_limiter_middleware",
     "register_security_context_middleware",

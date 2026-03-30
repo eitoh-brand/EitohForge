@@ -26,19 +26,37 @@ from app.modules.{{ module_name }}.schema import (
 
 __all__ = ["router", "{{ class_name }}Create", "{{ class_name }}Read", "{{ class_name }}Update"]
 ''',
-    "schema.py": """from pydantic import BaseModel, ConfigDict, Field
+    "schema.py": """from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class {{ class_name }}Create(BaseModel):
+    \"\"\"Create payload: common field types + optional FK-style relation stub.\"\"\"
+
     model_config = ConfigDict(frozen=True)
 
     name: str = Field(min_length=1, max_length=128)
+    description: str | None = Field(default=None, max_length=2000)
+    quantity: int = Field(default=1, ge=0, le=1_000_000)
+    is_active: bool = True
+    parent_resource_id: str | None = Field(
+        default=None,
+        max_length=64,
+        description="Optional link to another resource id (foreign-key style stub; no DB join enforced here).",
+    )
+    due_at: datetime | None = None
 
 
 class {{ class_name }}Update(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     name: str | None = Field(default=None, min_length=1, max_length=128)
+    description: str | None = Field(default=None, max_length=2000)
+    quantity: int | None = Field(default=None, ge=0, le=1_000_000)
+    is_active: bool | None = None
+    parent_resource_id: str | None = Field(default=None, max_length=64)
+    due_at: datetime | None = None
 
 
 class {{ class_name }}Read(BaseModel):
@@ -46,8 +64,14 @@ class {{ class_name }}Read(BaseModel):
 
     id: str
     name: str
+    description: str | None
+    quantity: int
+    is_active: bool
+    parent_resource_id: str | None
+    due_at: datetime | None
 """,
     "service.py": """from dataclasses import dataclass
+from datetime import datetime
 from uuid import uuid4
 
 from app.application.dto.repository import QuerySpec
@@ -65,6 +89,23 @@ from app.modules.{{ module_name }}.schema import (
 class _{{ class_name }}Record:
     id: str
     name: str
+    description: str | None
+    quantity: int
+    is_active: bool
+    parent_resource_id: str | None
+    due_at: datetime | None
+
+
+def _to_read(record: _{{ class_name }}Record) -> {{ class_name }}Read:
+    return {{ class_name }}Read(
+        id=record.id,
+        name=record.name,
+        description=record.description,
+        quantity=record.quantity,
+        is_active=record.is_active,
+        parent_resource_id=record.parent_resource_id,
+        due_at=record.due_at,
+    )
 
 
 class {{ class_name }}Service:
@@ -74,10 +115,18 @@ class {{ class_name }}Service:
 
     async def create(self, payload: {{ class_name }}Create, context: ValidationContext) -> ApiResponse:
         await self._validation.validate_or_raise(payload, context)
-        record = _{{ class_name }}Record(id=str(uuid4()), name=payload.name)
+        record = _{{ class_name }}Record(
+            id=str(uuid4()),
+            name=payload.name,
+            description=payload.description,
+            quantity=payload.quantity,
+            is_active=payload.is_active,
+            parent_resource_id=payload.parent_resource_id,
+            due_at=payload.due_at,
+        )
         self._items[record.id] = record
         return ApiResponse(
-            data={{ class_name }}Read(id=record.id, name=record.name),
+            data=_to_read(record),
             message="{{ class_name }} created",
             meta=_response_meta(context),
         )
@@ -89,7 +138,7 @@ class {{ class_name }}Service:
         page_size = query.pagination.page_size
         page = values[offset : offset + page_size]
         return PaginatedApiResponse(
-            data=tuple({{ class_name }}Read(id=item.id, name=item.name) for item in page),
+            data=tuple(_to_read(item) for item in page),
             pagination=PaginationMeta(total=len(values), page_size=page_size),
             message="{{ class_name }} list",
             meta=_response_meta(context),
@@ -104,8 +153,18 @@ class {{ class_name }}Service:
             return ApiResponse(success=False, data=None, message="{{ class_name }} not found")
         if payload.name is not None:
             item.name = payload.name
+        if payload.description is not None:
+            item.description = payload.description
+        if payload.quantity is not None:
+            item.quantity = payload.quantity
+        if payload.is_active is not None:
+            item.is_active = payload.is_active
+        if payload.parent_resource_id is not None:
+            item.parent_resource_id = payload.parent_resource_id
+        if payload.due_at is not None:
+            item.due_at = payload.due_at
         return ApiResponse(
-            data={{ class_name }}Read(id=item.id, name=item.name),
+            data=_to_read(item),
             message="{{ class_name }} updated",
             meta=_response_meta(context),
         )
@@ -173,7 +232,9 @@ async def delete_{{ resource_name }}(entity_id: str, request: Request) -> ApiRes
 """,
 }
 
-CRUD_TEST_FILE_TEMPLATE = """import asyncio
+CRUD_TEST_FILE_TEMPLATE = """from datetime import UTC, datetime
+
+import asyncio
 
 from app.application.dto.repository import QuerySpec
 from app.core.validation.context import ValidationContext, ValidationStage
@@ -187,18 +248,37 @@ def _context() -> ValidationContext:
 
 def test_{{ module_name }}_service_crud_cycle() -> None:
     service = {{ class_name }}Service()
+    due = datetime(2030, 6, 15, 12, 0, tzinfo=UTC)
 
-    created = asyncio.run(service.create({{ class_name }}Create(name="first"), _context()))
+    created = asyncio.run(
+        service.create(
+            {{ class_name }}Create(
+                name="first",
+                description="A row",
+                quantity=3,
+                is_active=False,
+                parent_resource_id="parent-xyz",
+                due_at=due,
+            ),
+            _context(),
+        )
+    )
     assert created.success is True
     entity_id = getattr(created.data, "id")
+    assert getattr(created.data, "quantity") == 3
+    assert getattr(created.data, "parent_resource_id") == "parent-xyz"
+    assert getattr(created.data, "due_at") == due
 
     listed = asyncio.run(service.list(QuerySpec(), _context()))
     assert listed.success is True
     assert listed.pagination.total >= 1
 
-    updated = asyncio.run(service.update(entity_id, {{ class_name }}Update(name="second"), _context()))
+    updated = asyncio.run(
+        service.update(entity_id, {{ class_name }}Update(name="second", quantity=5), _context())
+    )
     assert updated.success is True
     assert getattr(updated.data, "name") == "second"
+    assert getattr(updated.data, "quantity") == 5
 
     deleted = asyncio.run(service.delete(entity_id, _context()))
     assert deleted.success is True
@@ -240,4 +320,3 @@ def render_crud_project_templates(context: CrudTemplateContext) -> dict[str, str
         resource_name=context.resource_name,
     )
     return project_templates
-

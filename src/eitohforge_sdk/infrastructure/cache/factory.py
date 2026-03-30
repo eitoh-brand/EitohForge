@@ -8,6 +8,7 @@ from eitohforge_sdk.core.config import AppSettings, CacheSettings
 from eitohforge_sdk.infrastructure.cache.contracts import CacheProvider
 from eitohforge_sdk.infrastructure.cache.memory import MemoryCacheProvider
 from eitohforge_sdk.infrastructure.cache.redis import RedisCacheProvider
+from eitohforge_sdk.infrastructure.cache.tenant_scoped import TenantScopedCacheProvider
 
 
 def build_cache_provider(
@@ -16,7 +17,10 @@ def build_cache_provider(
     redis_client: Any | None = None,
 ) -> CacheProvider:
     """Build a cache provider from app settings."""
-    return _build_cache_provider_for_settings(settings.cache, redis_client=redis_client)
+    delegate = _build_cache_provider_for_settings(settings.cache, redis_client=redis_client)
+    if settings.tenant.enabled:
+        return TenantScopedCacheProvider(delegate=delegate)
+    return delegate
 
 
 def _build_cache_provider_for_settings(

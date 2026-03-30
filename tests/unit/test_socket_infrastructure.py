@@ -72,6 +72,29 @@ def test_socket_hub_tracks_rooms_presence_and_broadcasts() -> None:
     assert hub.room_members("room.orders") == ()
 
 
+def test_socket_hub_send_direct_to_actor_targets_by_actor_id() -> None:
+    hub = InMemorySocketHub()
+    sock_a = FakeSocketConnection()
+    sock_b = FakeSocketConnection()
+    conn_a = hub.register(sock_a, SocketPrincipal(actor_id="alice"))
+    hub.register(sock_b, SocketPrincipal(actor_id="bob"))
+    delivered = asyncio.run(
+        hub.send_direct_to_actor(
+            target_actor_id="bob",
+            event="note",
+            payload={"text": "hi"},
+            from_actor_id="alice",
+            exclude_connection_id=conn_a,
+        )
+    )
+    assert delivered == 1
+    assert sock_b.messages[0]["event"] == "note"
+    assert sock_b.messages[0]["room"] == "__direct__"
+    assert sock_b.messages[0]["from_actor_id"] == "alice"
+    assert sock_b.messages[0]["target_actor_id"] == "bob"
+    assert sock_a.messages == []
+
+
 def test_extract_socket_token_from_query_or_authorization_header() -> None:
     assert (
         extract_socket_token(

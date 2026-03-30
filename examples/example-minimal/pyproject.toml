@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "example-minimal-eitohforge"
+version = "0.1.0"
+description = "Minimal FastAPI service using EitohForge SDK (capabilities + health)."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "eitohforge>=0.1.0",
+  "fastapi>=0.116.0",
+  "uvicorn>=0.32.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3.0", "httpx>=0.28.0"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["example_minimal"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

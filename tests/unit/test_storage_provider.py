@@ -1,12 +1,17 @@
 from pathlib import Path
 from typing import Any
 
+import shutil
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from eitohforge_sdk.core.config import AppSettings
+from eitohforge_sdk.core.tenant import TenantIsolationRule, register_tenant_context_middleware
 from eitohforge_sdk.infrastructure.storage import (
     LocalStorageProvider,
     S3StorageProvider,
+    TenantScopedStorageProvider,
     build_storage_provider,
 )
 
@@ -31,7 +36,7 @@ def test_local_storage_provider_rejects_path_traversal(tmp_path: Path) -> None:
 
 
 def test_build_storage_provider_from_settings(tmp_path: Path) -> None:
-    settings = AppSettings()
+    settings = AppSettings(tenant={"enabled": False})
     provider = build_storage_provider(settings, local_root_path=tmp_path / "storage")
     assert isinstance(provider, LocalStorageProvider)
 
@@ -94,7 +99,93 @@ def test_s3_storage_provider_supports_presigned_urls() -> None:
 
 
 def test_build_storage_provider_for_s3_settings() -> None:
-    settings = AppSettings(storage={"provider": "s3", "bucket_name": "bucket", "region": "ap-south-1"})
+    settings = AppSettings(
+        tenant={"enabled": False},
+        storage={"provider": "s3", "bucket_name": "bucket", "region": "ap-south-1"},
+    )
     provider = build_storage_provider(settings, s3_client=_FakeS3Client())
     assert isinstance(provider, S3StorageProvider)
+
+
+def test_tenant_scoped_storage_provider_prefixes_keys(tmp_path: Path) -> None:
+    storage_root = tmp_path / "storage"
+    delegate = LocalStorageProvider(root_path=storage_root)
+    provider = TenantScopedStorageProvider(delegate=delegate)
+
+    app = FastAPI()
+    register_tenant_context_middleware(app, TenantIsolationRule(required_for_write_methods=False))
+
+    @app.post("/put")
+    def put() -> dict[str, object]:
+        result = provider.put_bytes("files/a.txt", b"hello")
+        return {
+            "returned_key": result.key,
+            "exists_prefixed": delegate.exists(result.key),
+            "exists_unprefixed": delegate.exists("files/a.txt"),
+        }
+
+    client = TestClient(app)
+
+    resp = client.post("/put", headers={"x-tenant-id": "tenant-a"})
+    assert resp.status_code == 200
+    assert resp.json()["returned_key"] == "tenant-a/files/a.txt"
+    assert resp.json()["exists_prefixed"] is True
+    assert resp.json()["exists_unprefixed"] is False
+
+    # Clear between requests so we can assert the unprefixed behavior.
+    shutil.rmtree(storage_root)
+    storage_root.mkdir(parents=True, exist_ok=True)
+    delegate = LocalStorageProvider(root_path=storage_root)
+    provider = TenantScopedStorageProvider(delegate=delegate)
+
+    resp = client.post("/put")
+    assert resp.status_code == 200
+    assert resp.json()["returned_key"] == "files/a.txt"
+    assert resp.json()["exists_prefixed"] is True
+    assert resp.json()["exists_unprefixed"] is True
+
+
+def test_tenant_scoped_storage_provider_prefixes_presigned_urls() -> None:
+    class _FakePresignStorageProvider:
+        def __init__(self) -> None:
+            self.last_put_key: str | None = None
+
+        def put_bytes(self, key: str, data: bytes, *, content_type: str | None = None):
+            _ = (data, content_type)
+            raise NotImplementedError
+
+        def get_bytes(self, key: str) -> bytes:
+            raise NotImplementedError
+
+        def delete(self, key: str) -> bool:
+            raise NotImplementedError
+
+        def exists(self, key: str) -> bool:
+            raise NotImplementedError
+
+        def generate_presigned_get_url(self, key: str, *, expires_in: int) -> str:
+            return f"https://signed/get/{key}?exp={expires_in}"
+
+        def generate_presigned_put_url(
+            self, key: str, *, expires_in: int, content_type: str | None = None
+        ) -> str:
+            self.last_put_key = key
+            return f"https://signed/put/{key}?exp={expires_in}&ct={content_type}"
+
+    delegate = _FakePresignStorageProvider()
+    provider = TenantScopedStorageProvider(delegate=delegate)  # type: ignore[arg-type]
+
+    app = FastAPI()
+    register_tenant_context_middleware(app, TenantIsolationRule(required_for_write_methods=False))
+
+    @app.get("/presign")
+    def presign() -> dict[str, object]:
+        url = provider.generate_presigned_put_url("files/upload.txt", expires_in=10, content_type="text/plain")
+        return {"url": url, "last_put_key": delegate.last_put_key}
+
+    client = TestClient(app)
+    resp = client.get("/presign", headers={"x-tenant-id": "tenant-a"})
+    assert resp.status_code == 200
+    assert resp.json()["last_put_key"] == "tenant-a/files/upload.txt"
+    assert "tenant-a/files/upload.txt" in resp.json()["url"]
 

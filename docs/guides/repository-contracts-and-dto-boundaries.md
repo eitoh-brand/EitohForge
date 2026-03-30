@@ -32,3 +32,5 @@ This guide defines the clean-architecture persistence boundary used by EitohForg
 ## Usage Rule
 
 Implement repositories against these contracts in infrastructure adapters; do not leak adapter-specific types into application or domain layers.
+
+For SQLAlchemy filter operators, value shapes, and optional strict column checks, see **`docs/guides/query-spec-reference.md`**.

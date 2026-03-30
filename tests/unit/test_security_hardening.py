@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from eitohforge_sdk.core.security_hardening import SecurityHardeningRule, register_security_hardening_middleware
+
+pytestmark = pytest.mark.security
 
 
 def test_security_hardening_adds_default_security_headers() -> None:

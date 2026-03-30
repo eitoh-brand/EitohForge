@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from inspect import isawaitable
 from typing import Any
 
@@ -104,6 +105,40 @@ class InMemorySocketHub:
                     "occurred_at": message.occurred_at.isoformat(),
                 }
             )
+            if isawaitable(maybe_awaitable):
+                await maybe_awaitable
+            delivered += 1
+        return delivered
+
+    async def send_direct_to_actor(
+        self,
+        *,
+        target_actor_id: str,
+        event: str,
+        payload: dict[str, Any] | None = None,
+        from_actor_id: str,
+        exclude_connection_id: str | None = None,
+    ) -> int:
+        """Deliver to all connections whose principal matches ``target_actor_id`` (this process only)."""
+        occurred_at = datetime.now(UTC).isoformat()
+        body = {
+            "event": event,
+            "room": "__direct__",
+            "payload": dict(payload or {}),
+            "occurred_at": occurred_at,
+            "from_actor_id": from_actor_id,
+            "target_actor_id": target_actor_id,
+        }
+        delivered = 0
+        for connection_id, principal in self._principals.items():
+            if principal.actor_id != target_actor_id:
+                continue
+            if exclude_connection_id is not None and connection_id == exclude_connection_id:
+                continue
+            connection = self._connections.get(connection_id)
+            if connection is None:
+                continue
+            maybe_awaitable = connection.send_json(body)
             if isawaitable(maybe_awaitable):
                 await maybe_awaitable
             delivered += 1

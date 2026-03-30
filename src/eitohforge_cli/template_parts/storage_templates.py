@@ -422,9 +422,68 @@ def _normalize_key(key: str) -> str:
 from typing import Any
 
 from app.core.config import AppSettings, StorageSettings
+from app.core.tenant import TenantContext
 from app.infrastructure.storage.contracts import StorageProvider
 from app.infrastructure.storage.local import LocalStorageProvider
 from app.infrastructure.storage.s3 import S3StorageProvider
+
+
+class TenantScopedStorageProvider:
+    def __init__(self, *, delegate: StorageProvider, separator: str = "/") -> None:
+        self._delegate = delegate
+        self._separator = separator
+
+    def _tenant_id_prefix(self) -> str | None:
+        tenant_id = TenantContext.current().tenant_id
+        if tenant_id is None:
+            return None
+        tenant_id = tenant_id.strip()
+        if not tenant_id:
+            return None
+        return f"{tenant_id}{self._separator}"
+
+    def _namespaced_key(self, key: str) -> str:
+        prefix = self._tenant_id_prefix()
+        if prefix is None:
+            return key
+        clean_key = key.strip().lstrip("/")
+        if not clean_key:
+            return key
+        if clean_key.startswith(prefix):
+            return key
+        return f"{prefix}{clean_key}"
+
+    def put_bytes(self, key: str, data: bytes, *, content_type: str | None = None):
+        namespaced = self._namespaced_key(key)
+        return self._delegate.put_bytes(namespaced, data, content_type=content_type)
+
+    def get_bytes(self, key: str) -> bytes:
+        return self._delegate.get_bytes(self._namespaced_key(key))
+
+    def delete(self, key: str) -> bool:
+        return self._delegate.delete(self._namespaced_key(key))
+
+    def exists(self, key: str) -> bool:
+        return self._delegate.exists(self._namespaced_key(key))
+
+    def _as_presignable_delegate(self) -> StorageProvider:
+        if not hasattr(self._delegate, "generate_presigned_get_url") or not hasattr(
+            self._delegate, "generate_presigned_put_url"
+        ):
+            raise TypeError("Underlying storage provider does not support presigned URLs.")
+        return self._delegate
+
+    def generate_presigned_get_url(self, key: str, *, expires_in: int) -> str:
+        delegate = self._as_presignable_delegate()
+        return delegate.generate_presigned_get_url(self._namespaced_key(key), expires_in=expires_in)
+
+    def generate_presigned_put_url(
+        self, key: str, *, expires_in: int, content_type: str | None = None
+    ) -> str:
+        delegate = self._as_presignable_delegate()
+        return delegate.generate_presigned_put_url(
+            self._namespaced_key(key), expires_in=expires_in, content_type=content_type
+        )
 
 
 def build_storage_provider(
@@ -433,11 +492,14 @@ def build_storage_provider(
     local_root_path: Path | None = None,
     s3_client: Any | None = None,
 ) -> StorageProvider:
-    return _build_storage_provider_for_settings(
+    delegate = _build_storage_provider_for_settings(
         settings.storage,
         local_root_path=local_root_path,
         s3_client=s3_client,
     )
+    if settings.tenant.enabled:
+        return TenantScopedStorageProvider(delegate=delegate)
+    return delegate
 
 
 def _build_storage_provider_for_settings(

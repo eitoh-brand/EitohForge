@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import asyncio
 
 from app.application.dto.repository import QuerySpec
@@ -12,18 +14,37 @@ def _context() -> ValidationContext:
 
 def test_orders_service_crud_cycle() -> None:
     service = OrdersService()
+    due = datetime(2030, 6, 15, 12, 0, tzinfo=UTC)
 
-    created = asyncio.run(service.create(OrdersCreate(name="first"), _context()))
+    created = asyncio.run(
+        service.create(
+            OrdersCreate(
+                name="first",
+                description="A row",
+                quantity=3,
+                is_active=False,
+                parent_resource_id="parent-xyz",
+                due_at=due,
+            ),
+            _context(),
+        )
+    )
     assert created.success is True
     entity_id = getattr(created.data, "id")
+    assert getattr(created.data, "quantity") == 3
+    assert getattr(created.data, "parent_resource_id") == "parent-xyz"
+    assert getattr(created.data, "due_at") == due
 
     listed = asyncio.run(service.list(QuerySpec(), _context()))
     assert listed.success is True
     assert listed.pagination.total >= 1
 
-    updated = asyncio.run(service.update(entity_id, OrdersUpdate(name="second"), _context()))
+    updated = asyncio.run(
+        service.update(entity_id, OrdersUpdate(name="second", quantity=5), _context())
+    )
     assert updated.success is True
     assert getattr(updated.data, "name") == "second"
+    assert getattr(updated.data, "quantity") == 5
 
     deleted = asyncio.run(service.delete(entity_id, _context()))
     assert deleted.success is True

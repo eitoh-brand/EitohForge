@@ -117,9 +117,37 @@ class RedisCacheProvider:
     "app/infrastructure/cache/factory.py": """from typing import Any
 
 from app.core.config import AppSettings, CacheSettings
+from app.core.tenant import TenantContext
 from app.infrastructure.cache.contracts import CacheProvider
 from app.infrastructure.cache.memory import MemoryCacheProvider
 from app.infrastructure.cache.redis import RedisCacheProvider
+
+
+class TenantScopedCacheProvider:
+    def __init__(self, *, delegate: CacheProvider, separator: str = ":") -> None:
+        self._delegate = delegate
+        self._separator = separator
+
+    def _namespaced_key(self, key: str) -> str:
+        tenant_id = TenantContext.current().tenant_id
+        if tenant_id is None:
+            return key
+        tenant_prefix = f"{tenant_id}{self._separator}"
+        if key.startswith(tenant_prefix):
+            return key
+        return f"{tenant_prefix}{key}"
+
+    def get(self, key: str) -> Any | None:
+        return self._delegate.get(self._namespaced_key(key))
+
+    def set(self, key: str, value: Any, *, ttl_seconds: int | None = None) -> None:
+        self._delegate.set(self._namespaced_key(key), value, ttl_seconds=ttl_seconds)
+
+    def delete(self, key: str) -> bool:
+        return self._delegate.delete(self._namespaced_key(key))
+
+    def exists(self, key: str) -> bool:
+        return self._delegate.exists(self._namespaced_key(key))
 
 
 def build_cache_provider(
@@ -127,7 +155,10 @@ def build_cache_provider(
     *,
     redis_client: Any | None = None,
 ) -> CacheProvider:
-    return _build_cache_provider_for_settings(settings.cache, redis_client=redis_client)
+    delegate = _build_cache_provider_for_settings(settings.cache, redis_client=redis_client)
+    if settings.tenant.enabled:
+        return TenantScopedCacheProvider(delegate=delegate)
+    return delegate
 
 
 def _build_cache_provider_for_settings(

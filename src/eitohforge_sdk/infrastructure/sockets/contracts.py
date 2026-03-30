@@ -35,3 +35,38 @@ class SocketConnection(Protocol):
 
     async def close(self, code: int = 1000, reason: str | None = None) -> None:
         ...
+
+
+class SocketHub(Protocol):
+    """Room membership and broadcast surface used by the realtime WebSocket router."""
+
+    def register(self, connection: SocketConnection, principal: SocketPrincipal) -> str: ...
+
+    def disconnect(self, connection_id: str) -> bool: ...
+
+    def join_room(self, room: str, connection_id: str) -> bool: ...
+
+    def leave_room(self, room: str, connection_id: str) -> bool: ...
+
+    def room_members(self, room: str) -> tuple[str, ...]: ...
+
+    def room_presence(self, room: str) -> dict[str, tuple[str, ...]]: ...
+
+    async def broadcast(
+        self,
+        *,
+        room: str,
+        event: str,
+        payload: dict[str, Any] | None = None,
+        exclude_connection_id: str | None = None,
+    ) -> int: ...
+
+    async def send_direct_to_actor(
+        self,
+        *,
+        target_actor_id: str,
+        event: str,
+        payload: dict[str, Any] | None = None,
+        from_actor_id: str,
+        exclude_connection_id: str | None = None,
+    ) -> int: ...

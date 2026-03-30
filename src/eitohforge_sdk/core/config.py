@@ -1,15 +1,26 @@
 """Typed configuration for EitohForge runtime."""
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 from urllib.parse import quote_plus
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class DatabaseSettings(BaseSettings):
-    """Database runtime configuration."""
+    """Database runtime configuration.
+
+    For **Postgres**, ``name`` is the database name and ``driver`` defaults to ``postgresql+psycopg``.
+
+    For **MySQL**, use ``driver`` such as ``mysql+pymysql``, set ``port`` (commonly ``3306``), and
+    ``name`` to the schema/database name. Raw connections use ``pymysql``.
+
+    For **SQLite**, set ``driver`` to ``sqlite`` or ``sqlite+pysqlite``; ``name`` is the database path
+    (relative or absolute), or ``:memory:`` for an in-memory database. Host, port, username, and
+    password are ignored for SQLite.
+    """
 
     model_config = SettingsConfigDict(
         env_prefix="EITOHFORGE_DB_",
@@ -26,6 +37,14 @@ class DatabaseSettings(BaseSettings):
     @property
     def sqlalchemy_url(self) -> str:
         """Return SQLAlchemy-compatible connection URL."""
+        driver_lower = self.driver.lower()
+        if driver_lower.startswith("sqlite"):
+            db = self.name.strip()
+            if db == ":memory:":
+                return "sqlite+pysqlite:///:memory:"
+            path = Path(db).expanduser()
+            resolved = path.resolve()
+            return f"sqlite+pysqlite:///{resolved.as_posix()}"
         user = quote_plus(self.username)
         password = quote_plus(self.password)
         return f"{self.driver}://{user}:{password}@{self.host}:{self.port}/{self.name}"
@@ -145,6 +164,13 @@ class ObservabilitySettings(BaseSettings):
     enable_tracing: bool = True
     trace_header: str = "x-trace-id"
     request_id_header: str = "x-request-id"
+    enable_prometheus: bool = False
+    prometheus_metrics_path: str = "/metrics"
+    otel_enabled: bool = False
+    otel_service_name: str = "eitohforge"
+    # OTLP traces over HTTP endpoint, e.g. `http://localhost:4318/v1/traces`.
+    # If unset while `otel_enabled=true`, tracing falls back to a console exporter.
+    otel_otlp_http_endpoint: str | None = None
 
 
 class AuditSettings(BaseSettings):
@@ -194,6 +220,18 @@ class TenantSettings(BaseSettings):
     write_methods: str = "POST,PUT,PATCH,DELETE"
     scope_path_prefix: str | None = None
     resource_tenant_header: str = "x-resource-tenant-id"
+    # Optional per-tenant schema isolation for SQL databases (Postgres).
+    # When enabled, SQLAlchemy repositories attempt to set `search_path` at the
+    # start of each session scope, using the resolved tenant id.
+    db_schema_isolation_enabled: bool = False
+    db_schema_name_template: str = "{tenant_id}"
+
+    @field_validator("db_schema_name_template")
+    @classmethod
+    def _validate_schema_name_template(cls, v: str) -> str:
+        if "{tenant_id}" not in v:
+            raise ValueError('db_schema_name_template must include "{tenant_id}".')
+        return v
 
     @property
     def write_methods_tuple(self) -> tuple[str, ...]:
@@ -284,9 +322,68 @@ class AuthSettings(BaseSettings):
         env_file=(".env", ".env.local"),
         extra="ignore",
     )
+    jwt_enabled: bool = True
     jwt_secret: str = Field(default="replace-with-32-plus-char-secret-value", min_length=32)
     access_token_minutes: int = 15
     refresh_token_days: int = 7
+
+
+class RuntimeSettings(BaseSettings):
+    """HTTP runtime: CORS, public URL, and default bind hints for dev/prod."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="EITOHFORGE_RUNTIME_",
+        env_file=(".env", ".env.local"),
+        extra="ignore",
+    )
+    public_base_url: str | None = None
+    cors_allow_origins: str = ""
+    cors_allow_credentials: bool = False
+    trust_forwarded_headers: bool = False
+    enforce_https_redirect: bool = False
+    default_bind_host: str = "127.0.0.1"
+    default_bind_port: int = Field(default=8000, ge=1, le=65535)
+
+    @property
+    def cors_origins_tuple(self) -> tuple[str, ...]:
+        return tuple(part.strip() for part in self.cors_allow_origins.split(",") if part.strip())
+
+
+class RealtimeSettings(BaseSettings):
+    """WebSocket realtime (JWT handshake, rooms; in-memory hub by default)."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="EITOHFORGE_REALTIME_",
+        env_file=(".env", ".env.local"),
+        extra="ignore",
+    )
+    enabled: bool = True
+    require_access_jwt: bool = True
+    redis_url: str | None = None
+    redis_broadcast_channel: str = "eitohforge:realtime:broadcast"
+
+    @field_validator("redis_url", mode="before")
+    @classmethod
+    def _normalize_redis_url(cls, v: object) -> str | None:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            return s or None
+        return None
+
+
+class ApiVersioningSettings(BaseSettings):
+    """HTTP API version lifecycle (deprecation headers on ``/v1`` routes)."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="EITOHFORGE_API_VERSION_",
+        env_file=(".env", ".env.local"),
+        extra="ignore",
+    )
+    deprecate_v1: bool = False
+    v1_sunset_http_date: str | None = None
+    v1_link_deprecation: str | None = None
 
 
 class AppSettings(BaseSettings):
@@ -315,6 +412,9 @@ class AppSettings(BaseSettings):
     plugins: PluginSettings = Field(default_factory=PluginSettings)
     feature_flags: FeatureFlagSettings = Field(default_factory=FeatureFlagSettings)
     security_hardening: SecurityHardeningSettings = Field(default_factory=SecurityHardeningSettings)
+    runtime: RuntimeSettings = Field(default_factory=RuntimeSettings)
+    realtime: RealtimeSettings = Field(default_factory=RealtimeSettings)
+    api_versioning: ApiVersioningSettings = Field(default_factory=ApiVersioningSettings)
     storage: StorageSettings = Field(default_factory=StorageSettings)
     secrets: SecretSettings = Field(default_factory=SecretSettings)
 
@@ -328,6 +428,15 @@ class AppSettings(BaseSettings):
         if self.request_signing.enabled and self.request_signing.shared_secret.startswith("replace-with-"):
             raise ValueError(
                 "EITOHFORGE_REQUEST_SIGNING_SHARED_SECRET must be set when request signing is enabled."
+            )
+        if self.app_env == "prod" and any(o.strip() == "*" for o in self.runtime.cors_origins_tuple):
+            raise ValueError(
+                "Wildcard CORS (EITOHFORGE_RUNTIME_CORS_ALLOW_ORIGINS=*) is not allowed when EITOHFORGE_APP_ENV=prod."
+            )
+        if self.realtime.enabled and self.realtime.require_access_jwt and not self.auth.jwt_enabled:
+            raise ValueError(
+                "Realtime WebSocket requires JWT when EITOHFORGE_REALTIME_REQUIRE_ACCESS_JWT=true "
+                "but EITOHFORGE_AUTH_JWT_ENABLED=false."
             )
         return self
 

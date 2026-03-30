@@ -730,6 +730,7 @@ def get_request_id(request: Request) -> str | None:
     return getattr(request.state, "request_id", None)
 """,
     "app/core/tenant.py": """from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 from dataclasses import dataclass
 
 from fastapi import FastAPI, Request
@@ -743,12 +744,25 @@ from app.core.security_context import (
 )
 
 
+_tenant_context_var: ContextVar["TenantContext | None"] = ContextVar(
+    "eitohforge_tenant_context",
+    default=None,
+)
+
+
 @dataclass(frozen=True)
 class TenantContext:
     tenant_id: str | None
     actor_id: str | None
     request_id: str | None
     trace_id: str | None
+
+    @staticmethod
+    def current() -> "TenantContext":
+        existing = _tenant_context_var.get()
+        if isinstance(existing, TenantContext):
+            return existing
+        return TenantContext(tenant_id=None, actor_id=None, request_id=None, trace_id=None)
 
 
 @dataclass(frozen=True)
@@ -807,19 +821,28 @@ def register_tenant_context_middleware(app: FastAPI, rule: TenantIsolationRule) 
 
         tenant_context = build_tenant_context_from_security_context(get_request_security_context(request))
         request.state.tenant_context = tenant_context
-
-        method = request.method.upper()
-        if rule.required_for_write_methods and method in set(rule.write_methods) and not tenant_context.tenant_id:
-            return _tenant_error("TENANT_CONTEXT_REQUIRED", "Tenant context is required for write operations.")
+        token = _tenant_context_var.set(tenant_context)
 
         try:
-            assert_tenant_access(
-                tenant_context,
-                resource_tenant_id=request.headers.get(rule.resource_tenant_header),
-            )
-        except TenantIsolationError:
-            return _tenant_error("TENANT_ACCESS_DENIED", "Tenant boundary violation.")
-        return await call_next(request)
+            method = request.method.upper()
+            if (
+                rule.required_for_write_methods
+                and method in set(rule.write_methods)
+                and not tenant_context.tenant_id
+            ):
+                return _tenant_error("TENANT_CONTEXT_REQUIRED", "Tenant context is required for write operations.")
+
+            try:
+                assert_tenant_access(
+                    tenant_context,
+                    resource_tenant_id=request.headers.get(rule.resource_tenant_header),
+                )
+            except TenantIsolationError:
+                return _tenant_error("TENANT_ACCESS_DENIED", "Tenant boundary violation.")
+
+            return await call_next(request)
+        finally:
+            _tenant_context_var.reset(token)
 
 
 def _tenant_error(code: str, message: str) -> JSONResponse:

@@ -4,6 +4,7 @@ import typer
 
 from eitohforge_cli.commands.create import create_app
 from eitohforge_cli.commands.db import db_app
+from eitohforge_cli.commands.dev import dev_app
 
 
 app = typer.Typer(
@@ -12,6 +13,7 @@ app = typer.Typer(
 )
 app.add_typer(create_app, name="create")
 app.add_typer(db_app, name="db")
+app.add_typer(dev_app, name="dev")
 
 
 @app.callback()

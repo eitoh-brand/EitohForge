@@ -2,7 +2,7 @@ import pytest
 
 from eitohforge_sdk.core.config import AppSettings
 from eitohforge_sdk.infrastructure.database.factory import build_database_provider, build_database_registry
-from eitohforge_sdk.infrastructure.database.providers import PostgresProvider
+from eitohforge_sdk.infrastructure.database.providers import MySQLProvider, PostgresProvider, SqliteProvider
 
 
 def test_build_database_provider_returns_postgres() -> None:
@@ -11,8 +11,58 @@ def test_build_database_provider_returns_postgres() -> None:
     assert isinstance(provider, PostgresProvider)
 
 
-def test_build_database_provider_rejects_unsupported_driver(monkeypatch) -> None:
+def test_build_database_provider_returns_sqlite(monkeypatch) -> None:
+    monkeypatch.setenv("EITOHFORGE_DB_DRIVER", "sqlite")
+    monkeypatch.setenv("EITOHFORGE_DB_NAME", ":memory:")
+    settings = AppSettings()
+    provider = build_database_provider(settings)
+    assert isinstance(provider, SqliteProvider)
+    assert provider.ping() is True
+
+
+def test_sqlite_provider_file_path(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "forge.db"
+    monkeypatch.setenv("EITOHFORGE_DB_DRIVER", "sqlite+pysqlite")
+    monkeypatch.setenv("EITOHFORGE_DB_NAME", str(db_path))
+    settings = AppSettings()
+    provider = build_database_provider(settings)
+    assert isinstance(provider, SqliteProvider)
+    assert provider.ping() is True
+    assert db_path.exists()
+
+
+def test_build_database_provider_returns_mysql(monkeypatch) -> None:
     monkeypatch.setenv("EITOHFORGE_DB_DRIVER", "mysql+pymysql")
+    monkeypatch.setenv("EITOHFORGE_DB_PORT", "3306")
+    settings = AppSettings()
+    provider = build_database_provider(settings)
+    assert isinstance(provider, MySQLProvider)
+    assert "mysql" in provider.dsn().lower()
+    assert "3306" in provider.dsn()
+
+
+def test_mysql_provider_connect_uses_pymysql(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakePyMySQL:
+        @staticmethod
+        def connect(**kwargs: object) -> object:
+            captured.update(kwargs)
+            return object()
+
+    settings = AppSettings()
+    settings.database.driver = "mysql+pymysql"
+    settings.database.port = 3306
+    provider = MySQLProvider(settings=settings.database)
+    monkeypatch.setattr(provider, "_load_pymysql", lambda: FakePyMySQL)
+    connection = provider.connect()
+    assert connection is not None
+    assert captured["host"] == settings.database.host
+    assert captured["database"] == settings.database.name
+
+
+def test_build_database_provider_rejects_unsupported_driver(monkeypatch) -> None:
+    monkeypatch.setenv("EITOHFORGE_DB_DRIVER", "oracle+cx_oracle")
     settings = AppSettings()
     with pytest.raises(ValueError):
         build_database_provider(settings)
@@ -84,4 +134,25 @@ def test_database_registry_includes_enabled_analytics_and_search(monkeypatch) ->
     assert registry.has("search")
     assert isinstance(registry.get("analytics"), PostgresProvider)
     assert isinstance(registry.get("search"), PostgresProvider)
+
+
+def test_database_registry_search_can_use_mysql(monkeypatch) -> None:
+    monkeypatch.setenv("EITOHFORGE_DB_SEARCH_ENABLED", "true")
+    monkeypatch.setenv("EITOHFORGE_DB_SEARCH_DRIVER", "mysql+pymysql")
+    monkeypatch.setenv("EITOHFORGE_DB_SEARCH_PORT", "3306")
+    settings = AppSettings()
+    registry = build_database_registry(settings)
+    assert isinstance(registry.get("primary"), PostgresProvider)
+    assert isinstance(registry.get("search"), MySQLProvider)
+
+
+def test_database_registry_analytics_can_use_sqlite(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("EITOHFORGE_DB_ANALYTICS_ENABLED", "true")
+    monkeypatch.setenv("EITOHFORGE_DB_ANALYTICS_DRIVER", "sqlite")
+    monkeypatch.setenv("EITOHFORGE_DB_ANALYTICS_NAME", str(tmp_path / "analytics.db"))
+    settings = AppSettings()
+    registry = build_database_registry(settings)
+    assert isinstance(registry.get("primary"), PostgresProvider)
+    assert isinstance(registry.get("analytics"), SqliteProvider)
+    assert registry.get("analytics").ping() is True
 

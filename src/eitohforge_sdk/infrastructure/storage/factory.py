@@ -9,6 +9,7 @@ from eitohforge_sdk.core.config import AppSettings, StorageSettings
 from eitohforge_sdk.infrastructure.storage.contracts import StorageProvider
 from eitohforge_sdk.infrastructure.storage.local import LocalStorageProvider
 from eitohforge_sdk.infrastructure.storage.s3 import S3StorageProvider
+from eitohforge_sdk.infrastructure.storage.tenant_scoped import TenantScopedStorageProvider
 
 
 def build_storage_provider(
@@ -18,11 +19,14 @@ def build_storage_provider(
     s3_client: Any | None = None,
 ) -> StorageProvider:
     """Build a storage provider from app settings."""
-    return _build_storage_provider_for_settings(
+    delegate = _build_storage_provider_for_settings(
         settings.storage,
         local_root_path=local_root_path,
         s3_client=s3_client,
     )
+    if settings.tenant.enabled:
+        return TenantScopedStorageProvider(delegate=delegate)
+    return delegate
 
 
 def _build_storage_provider_for_settings(

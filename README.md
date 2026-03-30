@@ -12,6 +12,12 @@ This repository contains an actively implemented enterprise SDK/CLI baseline thr
 
 ## Key Guides
 
+- `docs/guides/usage-complete.md`
 - `docs/guides/cookbook.md`
 - `docs/guides/enterprise-readiness-checklist.md`
 - `docs/releases/v0.1.0-rc.md`
+
+## Reference examples
+
+- `examples/example-minimal/` — smallest SDK-backed app (health + capabilities).
+- `examples/example-enterprise/` — middleware stack, health family, tenant, feature flags.

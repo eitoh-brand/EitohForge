@@ -59,10 +59,19 @@ class SsoProvider(Protocol):
 class SsoLinkStore(Protocol):
     """Persistent mapping store between external and internal identity."""
 
-    def resolve_subject(self, *, provider: str, external_subject: str) -> str | None:
+    def resolve_subject(
+        self, *, provider: str, external_subject: str, tenant_id: str | None
+    ) -> str | None:
         ...
 
-    def upsert_link(self, *, provider: str, external_subject: str, internal_subject: str) -> None:
+    def upsert_link(
+        self,
+        *,
+        provider: str,
+        external_subject: str,
+        tenant_id: str | None,
+        internal_subject: str,
+    ) -> None:
         ...
 
 
@@ -70,13 +79,24 @@ class SsoLinkStore(Protocol):
 class InMemorySsoLinkStore:
     """In-memory implementation of SSO link mapping."""
 
-    _links: dict[tuple[str, str], str] = field(default_factory=dict)
+    _links: dict[tuple[str, str, str], str] = field(default_factory=dict)
 
-    def resolve_subject(self, *, provider: str, external_subject: str) -> str | None:
-        return self._links.get((provider.strip().lower(), external_subject))
+    def resolve_subject(
+        self, *, provider: str, external_subject: str, tenant_id: str | None
+    ) -> str | None:
+        tenant_key = tenant_id or ""
+        return self._links.get((provider.strip().lower(), tenant_key, external_subject))
 
-    def upsert_link(self, *, provider: str, external_subject: str, internal_subject: str) -> None:
-        self._links[(provider.strip().lower(), external_subject)] = internal_subject
+    def upsert_link(
+        self,
+        *,
+        provider: str,
+        external_subject: str,
+        tenant_id: str | None,
+        internal_subject: str,
+    ) -> None:
+        tenant_key = tenant_id or ""
+        self._links[(provider.strip().lower(), tenant_key, external_subject)] = internal_subject
 
 
 @dataclass
@@ -111,7 +131,7 @@ class SsoBroker:
 
         identity = provider.exchange_authorization_code(code=code, redirect_uri=redirect_uri, state=state)
         internal_subject = self.link_store.resolve_subject(
-            provider=provider_key, external_subject=identity.subject
+            provider=provider_key, external_subject=identity.subject, tenant_id=identity.tenant_id
         )
 
         is_new_link = False
@@ -120,10 +140,14 @@ class SsoBroker:
                 raise SsoIdentityNotLinkedError(
                     f"No internal account link for provider='{provider_key}' subject='{identity.subject}'."
                 )
-            internal_subject = f"sso:{provider_key}:{identity.subject}"
+            if identity.tenant_id:
+                internal_subject = f"sso:{provider_key}:{identity.tenant_id}:{identity.subject}"
+            else:
+                internal_subject = f"sso:{provider_key}:{identity.subject}"
             self.link_store.upsert_link(
                 provider=provider_key,
                 external_subject=identity.subject,
+                tenant_id=identity.tenant_id,
                 internal_subject=internal_subject,
             )
             is_new_link = True

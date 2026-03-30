@@ -54,9 +54,10 @@ from app.core.security_hardening import SecurityHardeningRule, register_security
 from app.core.versioning import ApiVersion, register_versioned_routers
 """,
     'app/core/config.py': """from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -77,6 +78,14 @@ class DatabaseSettings(BaseSettings):
     def sqlalchemy_url(self) -> str:
         from urllib.parse import quote_plus
 
+        driver_lower = self.driver.lower()
+        if driver_lower.startswith("sqlite"):
+            db = self.name.strip()
+            if db == ":memory:":
+                return "sqlite+pysqlite:///:memory:"
+            path = Path(db).expanduser()
+            resolved = path.resolve()
+            return f"sqlite+pysqlite:///{resolved.as_posix()}"
         user = quote_plus(self.username)
         password = quote_plus(self.password)
         return f"{self.driver}://{user}:{password}@{self.host}:{self.port}/{self.name}"
@@ -108,6 +117,7 @@ class AuthSettings(BaseSettings):
         env_file=(".env", ".env.local"),
         extra="ignore",
     )
+    jwt_enabled: bool = True
     jwt_secret: str = Field(default="replace-with-32-plus-char-secret-value", min_length=32)
     access_token_minutes: int = 15
     refresh_token_days: int = 7
@@ -193,6 +203,11 @@ class ObservabilitySettings(BaseSettings):
     enable_tracing: bool = True
     trace_header: str = "x-trace-id"
     request_id_header: str = "x-request-id"
+    enable_prometheus: bool = False
+    prometheus_metrics_path: str = "/metrics"
+    otel_enabled: bool = False
+    otel_service_name: str = "eitohforge"
+    otel_otlp_http_endpoint: str | None = None
 
 
 class AuditSettings(BaseSettings):
@@ -236,6 +251,18 @@ class TenantSettings(BaseSettings):
     write_methods: str = "POST,PUT,PATCH,DELETE"
     scope_path_prefix: str | None = None
     resource_tenant_header: str = "x-resource-tenant-id"
+    # Optional per-tenant schema isolation for SQL databases (Postgres).
+    # When enabled, SQLAlchemy repositories attempt to set `search_path` at the
+    # start of each session scope, using the resolved tenant id.
+    db_schema_isolation_enabled: bool = False
+    db_schema_name_template: str = "{tenant_id}"
+
+    @field_validator("db_schema_name_template")
+    @classmethod
+    def _validate_schema_name_template(cls, v: str) -> str:
+        if "{tenant_id}" not in v:
+            raise ValueError('db_schema_name_template must include "{tenant_id}".')
+        return v
 
     @property
     def write_methods_tuple(self) -> tuple[str, ...]:
@@ -308,6 +335,58 @@ class SecretSettings(BaseSettings):
     azure_vault_url: str | None = None
 
 
+class RealtimeSettings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="EITOHFORGE_REALTIME_",
+        env_file=(".env", ".env.local"),
+        extra="ignore",
+    )
+    enabled: bool = True
+    require_access_jwt: bool = True
+    redis_url: str | None = None
+    redis_broadcast_channel: str = "eitohforge:realtime:broadcast"
+
+    @field_validator("redis_url", mode="before")
+    @classmethod
+    def _normalize_redis_url(cls, v: object) -> str | None:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            return s or None
+        return None
+
+
+class ApiVersioningSettings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="EITOHFORGE_API_VERSION_",
+        env_file=(".env", ".env.local"),
+        extra="ignore",
+    )
+    deprecate_v1: bool = False
+    v1_sunset_http_date: str | None = None
+    v1_link_deprecation: str | None = None
+
+
+class RuntimeSettings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="EITOHFORGE_RUNTIME_",
+        env_file=(".env", ".env.local"),
+        extra="ignore",
+    )
+    public_base_url: str | None = None
+    cors_allow_origins: str = ""
+    cors_allow_credentials: bool = False
+    trust_forwarded_headers: bool = False
+    enforce_https_redirect: bool = False
+    default_bind_host: str = "127.0.0.1"
+    default_bind_port: int = Field(default=8000, ge=1, le=65535)
+
+    @property
+    def cors_origins_tuple(self) -> tuple[str, ...]:
+        return tuple(part.strip() for part in self.cors_allow_origins.split(",") if part.strip())
+
+
 class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="EITOHFORGE_",
@@ -332,6 +411,9 @@ class AppSettings(BaseSettings):
     plugins: PluginSettings = Field(default_factory=PluginSettings)
     feature_flags: FeatureFlagSettings = Field(default_factory=FeatureFlagSettings)
     security_hardening: SecurityHardeningSettings = Field(default_factory=SecurityHardeningSettings)
+    runtime: RuntimeSettings = Field(default_factory=RuntimeSettings)
+    realtime: RealtimeSettings = Field(default_factory=RealtimeSettings)
+    api_versioning: ApiVersioningSettings = Field(default_factory=ApiVersioningSettings)
     storage: StorageSettings = Field(default_factory=StorageSettings)
     secrets: SecretSettings = Field(default_factory=SecretSettings)
 
@@ -345,6 +427,15 @@ class AppSettings(BaseSettings):
             raise ValueError(
                 "EITOHFORGE_REQUEST_SIGNING_SHARED_SECRET must be set when request signing is enabled."
             )
+        if self.app_env == "prod" and any(o.strip() == "*" for o in self.runtime.cors_origins_tuple):
+            raise ValueError(
+                "Wildcard CORS (EITOHFORGE_RUNTIME_CORS_ALLOW_ORIGINS=*) is not allowed when EITOHFORGE_APP_ENV=prod."
+            )
+        if self.realtime.enabled and self.realtime.require_access_jwt and not self.auth.jwt_enabled:
+            raise ValueError(
+                "Realtime WebSocket requires JWT when EITOHFORGE_REALTIME_REQUIRE_ACCESS_JWT=true "
+                "but EITOHFORGE_AUTH_JWT_ENABLED=false."
+            )
         return self
 
 
@@ -354,9 +445,13 @@ def get_settings() -> AppSettings:
 """,
     'app/core/secrets.py': """from __future__ import annotations
 
+import json
 import os
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
+from urllib.parse import quote
 
 from app.core.config import AppSettings
 
@@ -393,9 +488,80 @@ class UnconfiguredSecretProvider:
         )
 
 
+def _quote_secret_path(path: str) -> str:
+    segments = [seg for seg in path.strip("/").split("/") if seg]
+    return "/".join(quote(seg, safe="") for seg in segments)
+
+
+def _extract_secret_value(*, key: str, fields: dict[str, Any]) -> str | None:
+    if "value" in fields and fields["value"] is not None:
+        return str(fields["value"])
+    if key in fields and fields[key] is not None:
+        return str(fields[key])
+    if len(fields) == 1:
+        sole = next(iter(fields.values()))
+        return str(sole) if sole is not None else None
+    return None
+
+
+@dataclass
+class VaultSecretProvider:
+    vault_url: str | None
+    vault_mount: str = "secret"
+    token: str | None = None
+
+    def get(self, key: str) -> str | None:
+        if not self.vault_url or not self.token:
+            return None
+        base = self.vault_url.rstrip("/")
+        mount = self.vault_mount.strip("/")
+        secret_path = _quote_secret_path(key)
+
+        # KV v2: /v1/{mount}/data/{path}
+        url_v2 = f"{base}/v1/{mount}/data/{secret_path}"
+        data_v2 = self._fetch_json(url_v2)
+        if data_v2 is not None:
+            fields = data_v2.get("data", {}).get("data")
+            if isinstance(fields, dict):
+                extracted = _extract_secret_value(key=key, fields=fields)
+                if extracted is not None:
+                    return extracted
+
+        # KV v1: /v1/{mount}/{path}
+        url_v1 = f"{base}/v1/{mount}/{secret_path}"
+        data_v1 = self._fetch_json(url_v1)
+        if data_v1 is None:
+            return None
+        fields = data_v1.get("data")
+        if not isinstance(fields, dict):
+            return None
+        return _extract_secret_value(key=key, fields=fields)
+
+    def _fetch_json(self, url: str) -> dict[str, Any] | None:
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={"X-Vault-Token": self.token or "", "Accept": "application/json"},
+                method="GET",
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                raw = resp.read().decode("utf-8")
+            parsed = json.loads(raw)
+            return parsed if isinstance(parsed, dict) else None
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+            return None
+
+
 def build_secret_provider(settings: AppSettings) -> SecretProvider:
     if settings.secrets.provider == "env":
         return EnvSecretProvider()
+    if settings.secrets.provider == "vault":
+        token = os.environ.get("VAULT_TOKEN") or os.environ.get("EITOHFORGE_SECRET_VAULT_TOKEN")
+        return VaultSecretProvider(
+            vault_url=settings.secrets.vault_url,
+            vault_mount=settings.secrets.vault_mount,
+            token=token,
+        )
     return UnconfiguredSecretProvider(provider_name=settings.secrets.provider)
 """,
     'app/core/dependencies.py': """# Shared dependency providers live here.

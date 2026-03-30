@@ -10,7 +10,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class FilterOperator(str, Enum):
-    """Supported repository filter operations."""
+    """Operators implemented by ``SQLAlchemyRepository`` (SQLAlchemy column semantics).
+
+    Extensions: ``in`` / ``not_in`` (sequence values). ``exists`` maps to null checks: ``True`` →
+    column IS NOT NULL, ``False`` → IS NULL (not SQL EXISTS subqueries).
+    """
 
     EQ = "eq"
     NE = "ne"
@@ -54,7 +58,13 @@ class RepositoryContext(BaseModel):
 
 
 class FilterCondition(BaseModel):
-    """Filter predicate passed into repository list/paginate calls."""
+    """Filter predicate passed into repository list/paginate calls.
+
+    ``between`` expects a sequence of exactly two bounds. ``in`` / ``not_in`` expect a non-string
+    sequence (empty ``in`` matches no rows; empty ``not_in`` is a no-op). Unknown ``field`` names
+    are ignored by the repository (no error) unless you pre-validate with
+    ``validate_query_filters_against_columns``.
+    """
 
     model_config = ConfigDict(frozen=True)
 

@@ -3,10 +3,15 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
 from eitohforge_sdk.core.config import AppSettings
+from eitohforge_sdk.core.tenant import TenantIsolationRule, register_tenant_context_middleware
 from eitohforge_sdk.infrastructure.cache import (
     MemoryCacheProvider,
     RedisCacheProvider,
+    TenantScopedCacheProvider,
     build_cache_provider,
 )
 from eitohforge_sdk.infrastructure.cache.contracts import CacheEntry
@@ -62,11 +67,54 @@ def test_redis_cache_provider_json_roundtrip() -> None:
 
 
 def test_build_cache_provider_uses_settings() -> None:
-    memory_settings = AppSettings(cache={"provider": "memory"})
+    memory_settings = AppSettings(cache={"provider": "memory"}, tenant={"enabled": False})
     memory_provider = build_cache_provider(memory_settings)
     assert isinstance(memory_provider, MemoryCacheProvider)
 
-    redis_settings = AppSettings(cache={"provider": "redis"})
+    redis_settings = AppSettings(cache={"provider": "redis"}, tenant={"enabled": False})
     redis_provider = build_cache_provider(redis_settings, redis_client=_FakeRedisClient())
     assert isinstance(redis_provider, RedisCacheProvider)
+
+
+def test_tenant_scoped_cache_provider_namespaces_keys() -> None:
+    delegate = MemoryCacheProvider()
+    provider = TenantScopedCacheProvider(delegate=delegate)
+
+    app = FastAPI()
+    register_tenant_context_middleware(app, TenantIsolationRule())
+
+    @app.get("/set")
+    def set_item() -> dict[str, list[str]]:
+        provider.set("users:1", {"id": 1})
+        return {"keys": list(delegate._entries.keys())}
+
+    client = TestClient(app)
+
+    resp = client.get("/set", headers={"x-tenant-id": "tenant-a"})
+    assert resp.status_code == 200
+    assert resp.json()["keys"] == ["tenant-a:users:1"]
+
+    delegate._entries.clear()
+    resp = client.get("/set")
+    assert resp.status_code == 200
+    assert resp.json()["keys"] == ["users:1"]
+
+
+def test_tenant_scoped_cache_provider_avoids_double_prefix() -> None:
+    delegate = MemoryCacheProvider()
+    provider = TenantScopedCacheProvider(delegate=delegate)
+
+    app = FastAPI()
+    register_tenant_context_middleware(app, TenantIsolationRule(required_for_write_methods=False))
+
+    @app.get("/set_prefixed")
+    def set_prefixed() -> dict[str, list[str]]:
+        provider.set("tenant-a:users:1", {"id": 1})
+        return {"keys": list(delegate._entries.keys())}
+
+    client = TestClient(app)
+    resp = client.get("/set_prefixed", headers={"x-tenant-id": "tenant-a"})
+    assert resp.status_code == 200
+    assert resp.json()["keys"] == ["tenant-a:users:1"]
+
 

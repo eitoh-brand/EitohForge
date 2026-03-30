@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, is_dataclass
 from collections.abc import Sequence
 from datetime import datetime
 from typing import Any, Callable, Generic, Mapping, TypeVar
 from uuid import uuid4
 
-from sqlalchemy import Select, func, inspect, select
+from sqlalchemy import Select, false as sa_false, func, inspect, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from eitohforge_sdk.application.dto.repository import (
@@ -18,6 +19,8 @@ from eitohforge_sdk.application.dto.repository import (
     SortDirection,
     SortSpec,
 )
+from eitohforge_sdk.core.config import get_settings
+from eitohforge_sdk.core.tenant import TenantContext
 from eitohforge_sdk.domain.repositories.contracts import PageResult, RepositoryContract
 
 
@@ -30,6 +33,8 @@ class SQLAlchemyRepository(
     Generic[TEntity, TCreate, TUpdate], RepositoryContract[TEntity, TCreate, TUpdate]
 ):
     """Contract-compliant SQLAlchemy repository implementation."""
+
+    _SCHEMA_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
     def __init__(
         self,
@@ -48,6 +53,9 @@ class SQLAlchemyRepository(
         self._update_to_values = update_to_values or self._payload_to_values
         self._id_field = id_field
         self._columns = set(inspect(self._model_type).columns.keys())
+        settings = get_settings()
+        self._tenant_schema_isolation_enabled = settings.tenant.db_schema_isolation_enabled
+        self._tenant_schema_name_template = settings.tenant.db_schema_name_template
 
     async def create(self, payload: TCreate, context: RepositoryContext | None = None) -> TEntity:
         values = self._create_to_values(payload)
@@ -55,6 +63,7 @@ class SQLAlchemyRepository(
         if self._id_field in self._columns and self._id_field not in values:
             values[self._id_field] = str(uuid4())
         with self._session_factory() as session:
+            self._apply_tenant_schema_isolation(session, context)
             model = self._model_type(**values)
             session.add(model)
             session.commit()
@@ -63,6 +72,7 @@ class SQLAlchemyRepository(
 
     async def get(self, entity_id: str, context: RepositoryContext | None = None) -> TEntity | None:
         with self._session_factory() as session:
+            self._apply_tenant_schema_isolation(session, context)
             statement = self._base_statement(context).where(
                 getattr(self._model_type, self._id_field) == entity_id
             )
@@ -77,6 +87,7 @@ class SQLAlchemyRepository(
         values = self._update_to_values(payload)
         values = self._apply_write_context(values, context, is_create=False)
         with self._session_factory() as session:
+            self._apply_tenant_schema_isolation(session, context)
             statement = self._base_statement(context).where(
                 getattr(self._model_type, self._id_field) == entity_id
             )
@@ -92,6 +103,7 @@ class SQLAlchemyRepository(
 
     async def delete(self, entity_id: str, context: RepositoryContext | None = None) -> bool:
         with self._session_factory() as session:
+            self._apply_tenant_schema_isolation(session, context)
             statement = self._base_statement(context).where(
                 getattr(self._model_type, self._id_field) == entity_id
             )
@@ -106,6 +118,7 @@ class SQLAlchemyRepository(
         self, query: QuerySpec, context: RepositoryContext | None = None
     ) -> tuple[TEntity, ...]:
         with self._session_factory() as session:
+            self._apply_tenant_schema_isolation(session, context)
             statement = self._apply_query(self._base_statement(context), query)
             statement = self._apply_pagination(statement, query)
             models = session.scalars(statement).all()
@@ -115,6 +128,7 @@ class SQLAlchemyRepository(
         self, query: QuerySpec, context: RepositoryContext | None = None
     ) -> PageResult[TEntity]:
         with self._session_factory() as session:
+            self._apply_tenant_schema_isolation(session, context)
             base_statement = self._base_statement(context)
             count_statement = select(func.count()).select_from(base_statement.subquery())
             total = int(session.scalar(count_statement) or 0)
@@ -135,6 +149,7 @@ class SQLAlchemyRepository(
         self, payloads: tuple[TCreate, ...], context: RepositoryContext | None = None
     ) -> tuple[TEntity, ...]:
         with self._session_factory() as session:
+            self._apply_tenant_schema_isolation(session, context)
             models: list[Any] = []
             for payload in payloads:
                 values = self._apply_write_context(self._create_to_values(payload), context, is_create=True)
@@ -148,13 +163,47 @@ class SQLAlchemyRepository(
                 session.refresh(model)
             return tuple(self._to_entity(model) for model in models)
 
+    def _resolve_tenant_id_for_scope(self, context: RepositoryContext | None) -> str | None:
+        if context is not None and context.tenant_id is not None:
+            return context.tenant_id
+        return TenantContext.current().tenant_id
+
+    def _apply_tenant_schema_isolation(
+        self,
+        session: Session,
+        context: RepositoryContext | None,
+    ) -> None:
+        """Optionally set Postgres `search_path` based on tenant id."""
+
+        if not self._tenant_schema_isolation_enabled:
+            return
+
+        tenant_id = self._resolve_tenant_id_for_scope(context)
+        if tenant_id is None:
+            return
+
+        bind = session.get_bind()
+        dialect_name = getattr(getattr(bind, "dialect", None), "name", None)
+        if dialect_name not in {"postgresql"}:
+            return
+
+        template = self._tenant_schema_name_template
+        schema_name = template.format(tenant_id=str(tenant_id).strip())
+        if not self._SCHEMA_NAME_RE.match(schema_name):
+            raise ValueError(f"Invalid tenant schema name resolved from tenant_id={tenant_id!r}.")
+
+        # SET LOCAL affects the current transaction only.
+        session.execute(f'SET LOCAL search_path TO "{schema_name}"')
+
     def _base_statement(self, context: RepositoryContext | None) -> Select[Any]:
         statement = select(self._model_type)
-        if context is not None and context.tenant_id is not None and "tenant_id" in self._columns:
-            statement = statement.where(getattr(self._model_type, "tenant_id") == context.tenant_id)
+        tenant_id = context.tenant_id if context is not None and context.tenant_id is not None else TenantContext.current().tenant_id
+        if tenant_id is not None and "tenant_id" in self._columns:
+            statement = statement.where(getattr(self._model_type, "tenant_id") == tenant_id)
         return statement
 
     def _apply_query(self, statement: Select[Any], query: QuerySpec) -> Select[Any]:
+        """Apply ``QuerySpec`` filters and sorts. See ``docs/guides/query-spec-reference.md``."""
         for condition in query.filters:
             if condition.field not in self._columns:
                 continue
@@ -185,11 +234,17 @@ class SQLAlchemyRepository(
             elif operator == "in":
                 values = self._extract_in_values(condition.value)
                 if values is not None:
-                    statement = statement.where(column.in_(values))
+                    if len(values) == 0:
+                        statement = statement.where(sa_false())
+                    else:
+                        statement = statement.where(column.in_(values))
             elif operator == "not_in":
                 values = self._extract_in_values(condition.value)
                 if values is not None:
-                    statement = statement.where(column.not_in(values))
+                    if len(values) == 0:
+                        pass
+                    else:
+                        statement = statement.where(column.not_in(values))
             elif operator == "exists":
                 if bool(condition.value):
                     statement = statement.where(column.is_not(None))
@@ -206,16 +261,16 @@ class SQLAlchemyRepository(
     def _apply_write_context(
         self, values: dict[str, Any], context: RepositoryContext | None, *, is_create: bool
     ) -> dict[str, Any]:
-        if context is None:
-            return values
         scoped = dict(values)
-        if context.tenant_id is not None and "tenant_id" in self._columns and "tenant_id" not in scoped:
-            scoped["tenant_id"] = context.tenant_id
-        if context.actor_id is not None:
+        tenant_id = context.tenant_id if context is not None and context.tenant_id is not None else TenantContext.current().tenant_id
+        actor_id = context.actor_id if context is not None and context.actor_id is not None else TenantContext.current().actor_id
+        if tenant_id is not None and "tenant_id" in self._columns and "tenant_id" not in scoped:
+            scoped["tenant_id"] = tenant_id
+        if actor_id is not None:
             if is_create and "created_by" in self._columns and "created_by" not in scoped:
-                scoped["created_by"] = context.actor_id
+                scoped["created_by"] = actor_id
             if "updated_by" in self._columns:
-                scoped["updated_by"] = context.actor_id
+                scoped["updated_by"] = actor_id
         return scoped
 
     @staticmethod

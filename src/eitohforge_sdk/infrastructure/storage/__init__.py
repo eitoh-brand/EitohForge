@@ -21,6 +21,7 @@ from eitohforge_sdk.infrastructure.storage.policy import (
     TenantPrefixPolicy,
 )
 from eitohforge_sdk.infrastructure.storage.s3 import S3StorageProvider
+from eitohforge_sdk.infrastructure.storage.tenant_scoped import TenantScopedStorageProvider
 
 __all__ = [
     "StorageObject",
@@ -40,6 +41,7 @@ __all__ = [
     "RoleStorageAccessPolicy",
     "PolicyEnforcedStorageProvider",
     "S3StorageProvider",
+    "TenantScopedStorageProvider",
     "build_storage_provider",
 ]
 

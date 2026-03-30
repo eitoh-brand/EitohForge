@@ -28,20 +28,29 @@ This guide defines what “complete testing” means for EitohForge and how refe
 ## Quality Gates
 
 - CI must fail if required test classes do not run.
-- Coverage threshold enforced per package.
-- Flaky tests must be quarantined with owner and remediation SLA.
+- Coverage threshold enforced for `eitohforge_sdk` and `eitohforge_cli` (see `pyproject.toml` / CI).
+- Flaky tests must be quarantined with owner and remediation SLA (`docs/standards/flaky-test-policy.md`).
+
+## Test Closure Layout (P16)
+
+Organized suites (markers + directories):
+
+- `tests/contract/` — API/error JSON contracts (`@pytest.mark.contract`)
+- `tests/e2e/` — CLI + HTTP journeys (`@pytest.mark.e2e`)
+- `tests/migration/` — Alembic layout + migration policy (`@pytest.mark.migration`)
+- `tests/performance/` — perf smoke/regression (`@pytest.mark.perf`)
+- `tests/security/` — security regressions (`@pytest.mark.security`)
+
+Integration and unit tests remain under `tests/integration/` and `tests/unit/`. Markers are strict; only registered markers may be used.
 
 ## Reference Example Projects
 
-- `example-minimal`:
-  - fast bootstrap
-  - single module
-  - migrations and auth basics
-- `example-enterprise`:
-  - multi-tenant aware
-  - auth/session/RBAC
-  - background jobs + notifications
-  - observability + health + security middleware
+Committed under `examples/`:
+
+- `examples/example-minimal` — FastAPI + capabilities + `/health`; smallest install surface.
+- `examples/example-enterprise` — hardening, observability, tenant isolation, feature flags, full health family.
+
+For a **generated** full stack (CRUD, DB, webhooks, search, sockets), use `eitohforge create project` and optional `create crud`.
 
 ## Documentation Expectations for Examples
 

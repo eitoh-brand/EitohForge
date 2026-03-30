@@ -33,6 +33,34 @@ This guide defines how EitohForge will be packaged and distributed for productio
 6. Publish to internal registry.
 7. Optionally publish to PyPI after approval.
 
+## CI/CD Workflows
+
+- `ci.yml`
+  - quality gates: lint, typing, tests, migration policy
+  - packaging metadata validation
+  - reproducible build verification (`wheel` + `sdist`)
+  - compliance gates: `pip-audit`, SBOM, license policy
+- `publish-internal.yml`
+  - workflow-dispatch controlled internal registry release
+  - dry-run mode for validation-only runs
+  - provenance attestation for `dist/*`
+- `publish-pypi.yml`
+  - optional guarded PyPI release lane
+  - default dry-run mode
+  - intended for environment approval gates
+
+## Secrets and Environment Requirements
+
+For internal publish workflow:
+
+- `INTERNAL_PYPI_REPOSITORY_URL`
+- `INTERNAL_PYPI_USERNAME`
+- `INTERNAL_PYPI_PASSWORD`
+
+For guarded PyPI workflow:
+
+- use trusted publishing or the configured `pypi-release` environment secret policy.
+
 ## Versioning Policy
 
 - Use semantic versioning.
@@ -47,3 +75,13 @@ This guide defines how EitohForge will be packaged and distributed for productio
 - [ ] Changelog and migration notes are complete.
 - [ ] Vulnerability and license checks pass.
 - [ ] SBOM attached to release record.
+
+## Local Validation Commands
+
+- `python scripts/validate_packaging_metadata.py`
+- `python -m build --sdist --wheel`
+- `python scripts/verify_reproducible_build.py dist-pass-a dist-pass-b`
+- `pip-audit --strict`
+- `cyclonedx-py environment --output-file compliance/sbom.cdx.json --of JSON`
+- `pip-licenses --format=json --output-file=./compliance/licenses.json`
+- `python scripts/check_license_policy.py`

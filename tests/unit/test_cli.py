@@ -18,7 +18,8 @@ def test_create_project_generates_scaffold() -> None:
         result = runner.invoke(app, ["create", "project", "my_service"])
         assert result.exit_code == 0
         assert "Project scaffold created at:" in result.stdout
-        assert "(mode=sdk)" in result.stdout
+        assert "mode=sdk" in result.stdout
+        assert "profile=standard" in result.stdout
         assert Path("my_service/alembic.ini").exists()
         assert Path("my_service/migrations/env.py").exists()
         assert Path("my_service/app/infrastructure/database/registry.py").exists()
@@ -33,7 +34,8 @@ def test_create_project_standalone_mode_generates_self_contained_core() -> None:
     with runner.isolated_filesystem():
         result = runner.invoke(app, ["create", "project", "my_service", "--mode", "standalone"])
         assert result.exit_code == 0
-        assert "(mode=standalone)" in result.stdout
+        assert "mode=standalone" in result.stdout
+        assert "profile=standard" in result.stdout
         pyproject = Path("my_service/pyproject.toml").read_text(encoding="utf-8")
         rate_limit = Path("my_service/app/core/rate_limit.py").read_text(encoding="utf-8")
         assert "eitohforge-sdk" not in pyproject
