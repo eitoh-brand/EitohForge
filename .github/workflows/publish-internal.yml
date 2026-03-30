@@ -19,6 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SOURCE_DATE_EPOCH: "1735689600"
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,7 +46,9 @@ jobs:
           name: internal-release-artifacts
           path: dist/*
 
+      # Skipped on private user-owned repos (GitHub does not persist attestations there).
       - name: Generate provenance attestation
+        if: github.repository_visibility == 'public'
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: "dist/*"

@@ -12,6 +12,7 @@ on:
 permissions:
   contents: read
   id-token: write
+  # Only needed when "Generate provenance attestation" runs (public repos).
   attestations: write
 
 jobs:
@@ -19,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SOURCE_DATE_EPOCH: "1735689600"
+      # Reduces Node 20 deprecation noise until upstream actions default to Node 24.
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,7 +48,10 @@ jobs:
           name: pypi-release-artifacts
           path: dist/*
 
+      # Build attestations are not available for user-owned private repositories.
+      # Re-enable when the repo is public (or organization-owned with attestations enabled).
       - name: Generate provenance attestation
+        if: github.repository_visibility == 'public'
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: "dist/*"
