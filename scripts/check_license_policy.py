@@ -3,15 +3,67 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 
+# License policy:
+# - We block strong copyleft licenses (GPL/AGPL/SSPL).
+# - We allow LGPL because it is explicitly designed to enable linking by non-(L)GPL-licensed
+#   applications while preserving library freedoms.
+# - Some packages declare multiple licenses (e.g. docutils "BSD; GPL; Public Domain").
+#   For those, we only block if *all* declared variants are strong-copyleft.
 BLOCKED_LICENSE_TOKENS = (
     "gpl",
     "agpl",
-    "lgpl",
     "sspl",
 )
+
+def _variant_mentions_blocked_token(variant: str, token: str) -> bool:
+    """
+    Return True if `variant` should be considered blocked by `token`.
+
+    Important edge case:
+    - `LGPL...` contains the substring `gpl`, but we do NOT want to treat LGPL as GPL.
+    """
+
+    if token == "gpl":
+        # Block only "GPL" occurrences that are NOT part of "LGPL".
+        # Negative lookbehind avoids matching the "gpl" inside "lgpl".
+        return re.search(r"(?<!l)gpl", variant) is not None
+
+    return token in variant
+
+
+def _license_variants(license_name: str) -> list[str]:
+    """
+    Split pip-licenses license string into variants.
+
+    Examples:
+      - "BSD License; GNU General Public License (GPL); Public Domain"
+      - "LGPL-3.0-only"
+    """
+
+    s = license_name.strip().lower()
+    if not s:
+        return []
+
+    # pip-licenses uses strings that are often separated by ';' (and sometimes ',' / ' or ').
+    parts = re.split(r"\s*;\s*|\s*,\s*|\s+or\s+", s)
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _is_blocked_license(license_name: str) -> bool:
+    variants = _license_variants(license_name)
+    if not variants:
+        normalized = license_name.strip().lower()
+        return any(_variant_mentions_blocked_token(normalized, token) for token in BLOCKED_LICENSE_TOKENS)
+
+    # Block only if every variant mentions a blocked token.
+    return all(
+        any(_variant_mentions_blocked_token(variant, token) for token in BLOCKED_LICENSE_TOKENS)
+        for variant in variants
+    )
 
 
 def main() -> int:
@@ -34,7 +86,7 @@ def main() -> int:
         if normalized in {"", "unknown"}:
             unknown.append(name)
             continue
-        if any(token in normalized for token in BLOCKED_LICENSE_TOKENS):
+        if _is_blocked_license(license_name):
             blocked.append(f"{name} ({license_name})")
 
     if unknown:
