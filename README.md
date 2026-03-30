@@ -24,13 +24,15 @@ This README is intentionally **long-form for PyPI** and covers features, module 
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [CLI Usage (complete)](#cli-usage-complete)
+- [Feature Enable/Disable Strategy](#feature-enabledisable-strategy)
+- [Multi-Port and Multi-Instance Patterns](#multi-port-and-multi-instance-patterns)
+- [Database Selection and Connectivity](#database-selection-and-connectivity)
 - [SDK Usage (complete)](#sdk-usage-complete)
 - [Feature Coverage and Module-by-Module Usage](#feature-coverage-and-module-by-module-usage)
 - [Third-Party Support Matrix](#third-party-support-matrix)
 - [Configuration and Environment Variables](#configuration-and-environment-variables)
 - [Examples](#examples)
 - [Documentation (multi-page)](#documentation-multi-page)
-- [FAQ](#faq)
 - [License](#license)
 
 ---
@@ -128,6 +130,9 @@ Top-level command groups:
 - `db`
 - `dev`
 
+Current CLI intentionally focuses on scaffolding and operations. Feature toggling itself is runtime/config driven
+(`EITOHFORGE_*` env vars and optional `ForgePlatformToggles`), not a separate `enable/disable` CLI command.
+
 ### `eitohforge version`
 
 Prints installed package version (from distribution metadata).
@@ -187,6 +192,142 @@ Example `forge.dev.json`:
     }
   ]
 }
+```
+
+---
+
+## Feature Enable/Disable Strategy
+
+There are three practical layers:
+
+1) **Profile at scaffold time** (`create project --profile standard|minimal`)  
+- `standard`: starts with more platform behavior enabled by default
+- `minimal`: conservative defaults and explicit opt-in
+
+2) **Runtime flags via environment variables** (`EITOHFORGE_*`)  
+Common examples:
+
+```bash
+EITOHFORGE_RATE_LIMIT_ENABLED=true
+EITOHFORGE_IDEMPOTENCY_ENABLED=true
+EITOHFORGE_REQUEST_SIGNING_ENABLED=false
+EITOHFORGE_OBSERVABILITY_ENABLED=true
+EITOHFORGE_OBSERVABILITY_ENABLE_PROMETHEUS=true
+EITOHFORGE_OBSERVABILITY_OTEL_ENABLED=true
+EITOHFORGE_REALTIME_ENABLED=true
+EITOHFORGE_TENANT_ENABLED=true
+```
+
+3) **Code-level toggles for controlled rollout** (`ForgePlatformToggles`)  
+Useful when you want deterministic app composition per deployment stage.
+
+```python
+from eitohforge_sdk.core import ForgeAppBuildConfig, ForgePlatformToggles, build_forge_app
+from eitohforge_sdk.core.config import get_settings
+
+toggles = ForgePlatformToggles(
+    realtime_websocket=False,
+    observability=True,
+    feature_flags=True,
+)
+
+app = build_forge_app(
+    build=ForgeAppBuildConfig(
+        title="My Service",
+        settings_provider=get_settings,
+        toggles=toggles,
+    )
+)
+```
+
+---
+
+## Multi-Port and Multi-Instance Patterns
+
+### Local multi-port development
+
+Use `eitohforge dev` with `forge.dev.json` to run several FastAPI services at once (different ports, optional
+working directories and env overrides).
+
+```bash
+eitohforge dev validate --path .
+eitohforge dev --path .
+```
+
+### Horizontal multi-instance deployment
+
+EitohForge apps are stateless by design at the HTTP layer and can run as multiple instances behind a load balancer.
+For shared behavior across instances:
+
+- **Session/cache**: use Redis provider
+- **Realtime socket fanout/direct messaging**: set `EITOHFORGE_REALTIME_REDIS_URL`
+- **Idempotency/rate-limit/replay semantics**: prefer shared backing stores for strict cross-instance behavior
+
+Example production launch styles:
+
+```bash
+# Single process dev-like
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# Multi-worker single node
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+```
+
+In clustered/container environments, run multiple pods/instances behind your ingress/LB and keep Redis/Postgres as
+shared stateful services.
+
+---
+
+## Database Selection and Connectivity
+
+DB selection is controlled by `EITOHFORGE_DB_DRIVER` + related settings.
+
+### PostgreSQL (default path)
+
+```bash
+EITOHFORGE_DB_DRIVER=postgresql+psycopg
+EITOHFORGE_DB_HOST=localhost
+EITOHFORGE_DB_PORT=5432
+EITOHFORGE_DB_USERNAME=postgres
+EITOHFORGE_DB_PASSWORD=postgres
+EITOHFORGE_DB_NAME=eitohforge
+```
+
+### MySQL
+
+```bash
+EITOHFORGE_DB_DRIVER=mysql+pymysql
+EITOHFORGE_DB_HOST=localhost
+EITOHFORGE_DB_PORT=3306
+EITOHFORGE_DB_USERNAME=root
+EITOHFORGE_DB_PASSWORD=secret
+EITOHFORGE_DB_NAME=my_service
+```
+
+### SQLite
+
+```bash
+EITOHFORGE_DB_DRIVER=sqlite
+EITOHFORGE_DB_NAME=./data/app.db
+# or in-memory:
+# EITOHFORGE_DB_NAME=:memory:
+```
+
+### Connectivity and migration workflow
+
+```bash
+eitohforge db init --path .
+eitohforge db migrate -m "init schema" --path .
+eitohforge db upgrade --path .
+eitohforge db current --path .
+```
+
+For tenant-aware Postgres schema isolation:
+
+```bash
+EITOHFORGE_TENANT_ENABLED=true
+EITOHFORGE_TENANT_DB_SCHEMA_ISOLATION_ENABLED=true
+EITOHFORGE_TENANT_DB_SCHEMA_NAME_TEMPLATE={tenant_id}
 ```
 
 ---
@@ -566,26 +707,6 @@ Start here:
 - `docs/guides/query-spec-reference.md`
 - `docs/guides/python-packaging-and-publishing.md`
 - `secure_backend_sdk_architecture.md` (architecture + implementation map)
-
----
-
-## FAQ
-
-### Do I need a public GitHub repo to publish on PyPI?
-
-No. PyPI publishing can be done from private repos using trusted publishing (OIDC), as long as PyPI trusted publisher is configured correctly.
-
-### Is this README enough for PyPI?
-
-Yes. PyPI renders this README as the long description. For deeper details, this README links to the multi-page guides in the repository.
-
-### Can I use only the CLI and not the SDK?
-
-Yes. You can install with `pipx` and use scaffolding/migration/dev commands only.
-
-### Can I run without Redis?
-
-Yes for many features (memory providers exist). Redis is needed for Redis-backed session/cache/realtime fanout modes.
 
 ---
 
