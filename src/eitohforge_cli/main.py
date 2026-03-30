@@ -1,5 +1,7 @@
 """EitohForge command line entrypoint."""
 
+from importlib.metadata import PackageNotFoundError, version as distribution_version
+
 import typer
 
 from eitohforge_cli.commands.create import create_app
@@ -24,7 +26,11 @@ def root() -> None:
 @app.command("version")
 def version() -> None:
     """Show current CLI version."""
-    typer.echo("eitohforge 0.1.0")
+    try:
+        v = distribution_version("eitohforge")
+    except PackageNotFoundError:
+        v = "0.0.0-dev"
+    typer.echo(f"eitohforge {v}")
 
 
 def run() -> None:

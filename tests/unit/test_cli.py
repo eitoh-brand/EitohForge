@@ -1,3 +1,4 @@
+from importlib.metadata import version as pkg_version
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -9,7 +10,7 @@ def test_version_command_returns_cli_version() -> None:
     runner = CliRunner()
     result = runner.invoke(app, ["version"])
     assert result.exit_code == 0
-    assert "eitohforge 0.1.0" in result.stdout
+    assert f"eitohforge {pkg_version('eitohforge')}" in result.stdout
 
 
 def test_create_project_generates_scaffold() -> None:

@@ -31,7 +31,7 @@ def _validate_module_name(module_name: str) -> None:
 
 @create_app.command("project")
 def create_project(
-    project_name: str,
+    project_name: str = typer.Argument(..., help="Name of the generated project (used for package/module folder names)."),
     path: Path = typer.Option(Path("."), "--path", help="Target parent directory."),
     mode: Literal["sdk", "standalone"] = typer.Option(
         "sdk",
@@ -44,7 +44,11 @@ def create_project(
         help="Env defaults: 'standard' (most platform features on) or 'minimal' (opt-in via EITOHFORGE_*).",
     ),
 ) -> None:
-    """Create a new layered backend project scaffold."""
+    """Create a new layered backend project scaffold.
+
+    This renders the full project structure (app/, modules/, infra/, settings/, etc.)
+    with feature flags derived from the selected `profile`.
+    """
     _validate_project_name(project_name)
     target_parent = path.resolve()
     if not target_parent.exists():
@@ -61,10 +65,14 @@ def create_project(
 
 @create_app.command("crud")
 def create_crud_module(
-    module_name: str,
+    module_name: str = typer.Argument(..., help="CRUD module name (e.g. `orders`, `billing`, `support_tickets`)."),
     path: Path = typer.Option(Path("."), "--path", help="Target project directory."),
 ) -> None:
-    """Generate a CRUD module scaffold inside an existing project."""
+    """Generate a CRUD module scaffold inside an existing project.
+
+    The command expects the target directory to look like a previously generated
+    project (it must contain an `app/` folder).
+    """
     _validate_module_name(module_name)
     context = build_crud_context(module_name)
     project_dir = path.resolve()
