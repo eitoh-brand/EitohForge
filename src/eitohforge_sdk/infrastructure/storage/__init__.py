@@ -1,12 +1,19 @@
 """Storage provider implementations."""
 
+from eitohforge_sdk.infrastructure.storage.azure_blob import AzureBlobStorageProvider
 from eitohforge_sdk.infrastructure.storage.contracts import (
     PresignableStorageProvider,
     StorageObject,
     StorageProvider,
 )
-from eitohforge_sdk.infrastructure.storage.cdn import CdnUrlRewriter, build_storage_public_url
+from eitohforge_sdk.infrastructure.storage.cdn import (
+    CdnUrlRewriter,
+    build_storage_public_url,
+    resolve_s3_origin_base_url,
+)
+from eitohforge_sdk.infrastructure.storage.presigned_urls import PresignedObjectUrlsMixin
 from eitohforge_sdk.infrastructure.storage.factory import build_storage_provider
+from eitohforge_sdk.infrastructure.storage.gcs import GcsStorageProvider
 from eitohforge_sdk.infrastructure.storage.local import LocalStorageProvider
 from eitohforge_sdk.infrastructure.storage.policy import (
     AuthenticatedActorPolicy,
@@ -26,9 +33,13 @@ from eitohforge_sdk.infrastructure.storage.tenant_scoped import TenantScopedStor
 __all__ = [
     "StorageObject",
     "StorageProvider",
+    "AzureBlobStorageProvider",
+    "GcsStorageProvider",
     "PresignableStorageProvider",
+    "PresignedObjectUrlsMixin",
     "CdnUrlRewriter",
     "build_storage_public_url",
+    "resolve_s3_origin_base_url",
     "LocalStorageProvider",
     "StorageAction",
     "StorageAccessContext",

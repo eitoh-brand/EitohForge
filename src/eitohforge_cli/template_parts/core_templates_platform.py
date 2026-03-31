@@ -328,11 +328,12 @@ class SecretSettings(BaseSettings):
         env_file=(".env", ".env.local"),
         extra="ignore",
     )
-    provider: Literal["env", "vault", "aws", "azure"] = "env"
+    provider: Literal["env", "vault", "aws", "azure", "gcp"] = "env"
     vault_url: str | None = None
     vault_mount: str = "secret"
     aws_region: str | None = None
     azure_vault_url: str | None = None
+    gcp_project_id: str | None = None
 
 
 class RealtimeSettings(BaseSettings):

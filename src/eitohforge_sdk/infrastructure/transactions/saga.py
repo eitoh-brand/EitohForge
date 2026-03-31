@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Protocol
@@ -85,11 +86,20 @@ class SagaExecutionResult:
     error_message: str | None = None
 
 
+CompensationFailureCallback = Callable[[str, SagaContext, str, BaseException], None]
+
+
 class SagaOrchestrator:
     """Sequential saga orchestrator with compensation support."""
 
-    def __init__(self, state_store: SagaStateStore | None = None) -> None:
+    def __init__(
+        self,
+        state_store: SagaStateStore | None = None,
+        *,
+        on_compensation_failure: CompensationFailureCallback | None = None,
+    ) -> None:
         self._state_store = state_store or InMemorySagaStateStore()
+        self._on_compensation_failure = on_compensation_failure
 
     async def run(
         self, saga_name: str, steps: tuple[SagaStep, ...], context: SagaContext | None = None
@@ -118,8 +128,9 @@ class SagaOrchestrator:
                     await step.compensate(saga_context)
                     compensated_names.append(step.name)
                     self._state_store.step_compensated(saga_name, saga_context, step.name)
-                except Exception:
-                    # Compensation failures are recorded by omission.
+                except Exception as comp_exc:
+                    if self._on_compensation_failure is not None:
+                        self._on_compensation_failure(saga_name, saga_context, step.name, comp_exc)
                     continue
             final_status = SagaStatus.COMPENSATED if compensated_names else SagaStatus.FAILED
             self._state_store.finish(saga_name, saga_context, final_status)
@@ -129,4 +140,27 @@ class SagaOrchestrator:
                 compensated_steps=tuple(compensated_names),
                 error_message=str(exc),
             )
+
+
+@dataclass
+class SagaManager:
+    """Named saga definitions with a shared :class:`SagaOrchestrator`."""
+
+    orchestrator: SagaOrchestrator
+    _definitions: dict[str, tuple[SagaStep, ...]] = field(default_factory=dict)
+
+    def register(self, saga_name: str, steps: tuple[SagaStep, ...]) -> None:
+        """Register or replace the step sequence for ``saga_name``."""
+        key = saga_name.strip()
+        if not key:
+            raise ValueError("Saga name is required.")
+        self._definitions[key] = steps
+
+    async def run(self, saga_name: str, context: SagaContext | None = None) -> SagaExecutionResult:
+        """Execute a previously registered saga by name."""
+        key = saga_name.strip()
+        steps = self._definitions.get(key)
+        if steps is None:
+            raise KeyError(f"Unknown saga: {saga_name}")
+        return await self.orchestrator.run(key, steps, context)
 

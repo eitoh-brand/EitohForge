@@ -7,6 +7,12 @@ from typing import Literal
 import typer
 
 from eitohforge_cli.template_parts.crud_templates import build_crud_context, render_crud_project_templates
+from eitohforge_cli.template_parts.generator_templates import (
+    build_generator_context,
+    render_module_templates,
+    render_plugin_templates,
+    render_provider_templates,
+)
 from eitohforge_cli.templates import build_context, render_project
 
 
@@ -187,41 +193,76 @@ document rotation policy and fallback
     typer.echo(f"Pseudocode guide generated at: {output_path}")
 
 
-@create_app.command("provider")
-def create_provider_stub(
-    provider_name: str = typer.Argument(..., help="Provider module name (e.g. email_sendgrid, vault_custom)."),
+def _require_app_dir(project_dir: Path) -> Path:
+    app_dir = project_dir / "app"
+    if not app_dir.exists():
+        raise typer.BadParameter(f"Not a generated project (missing app/): {project_dir}")
+    return app_dir
+
+
+@create_app.command("module")
+def create_module(
+    module_name: str = typer.Argument(..., help="Domain module name (snake_case), e.g. invoicing."),
     path: Path = typer.Option(Path("."), "--path", help="Target project directory."),
 ) -> None:
-    """Scaffold a provider module stub under ``app/providers/`` for integrations."""
+    """Generate a domain module (router + schema) under ``app/modules/<name>/``."""
+    _validate_module_name(module_name)
+    project_dir = path.resolve()
+    if not project_dir.exists():
+        raise typer.BadParameter(f"Project path does not exist: {project_dir}")
+    _require_app_dir(project_dir)
+    ctx = build_generator_context(module_name)
+    modules_root = project_dir / "app" / "modules" / ctx.name
+    if modules_root.exists():
+        raise typer.BadParameter(f"Module already exists: {modules_root}")
+    for relative_path, content in render_module_templates(ctx).items():
+        destination = project_dir / relative_path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(content, encoding="utf-8")
+    typer.echo(f"Module scaffold created at: {modules_root}")
+
+
+@create_app.command("provider")
+def create_provider(
+    provider_name: str = typer.Argument(..., help="Provider name (snake_case), e.g. billing_gateway."),
+    path: Path = typer.Option(Path("."), "--path", help="Target project directory."),
+) -> None:
+    """Scaffold an infrastructure provider stub under ``app/infrastructure/providers/``."""
     _validate_module_name(provider_name)
     project_dir = path.resolve()
     if not project_dir.exists():
         raise typer.BadParameter(f"Project path does not exist: {project_dir}")
-    app_dir = project_dir / "app"
-    if not app_dir.exists():
-        raise typer.BadParameter(f"Not a generated project (missing app/): {project_dir}")
-    providers_dir = app_dir / "providers"
-    target = providers_dir / f"{provider_name}.py"
-    if target.exists():
-        raise typer.BadParameter(f"Provider already exists: {target}")
-    providers_dir.mkdir(parents=True, exist_ok=True)
-    init_file = providers_dir / "__init__.py"
-    if not init_file.exists():
-        init_file.write_text('"""Integration providers."""\n', encoding="utf-8")
-    content = f'''"""Provider stub: {provider_name}.
-
-Wire this from app composition (e.g. ``app/main.py``) or DI container.
-"""
-
-from __future__ import annotations
-
-from typing import Any
+    app_dir = _require_app_dir(project_dir)
+    ctx = build_generator_context(provider_name)
+    providers_dir = app_dir / "infrastructure" / "providers"
+    target_file = providers_dir / f"{ctx.name}.py"
+    if target_file.exists():
+        raise typer.BadParameter(f"Provider already exists: {target_file}")
+    for relative_path, content in render_provider_templates(ctx).items():
+        destination = project_dir / relative_path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(content, encoding="utf-8")
+    typer.echo(f"Provider scaffold created at: {target_file}")
 
 
-def configure() -> dict[str, Any]:
-    """Return provider-specific configuration for your integration."""
-    return {{"name": "{provider_name}"}}
-'''
-    target.write_text(content, encoding="utf-8")
-    typer.echo(f"Provider stub created at: {target}")
+@create_app.command("plugin")
+def create_plugin(
+    plugin_name: str = typer.Argument(..., help="Plugin name (snake_case), e.g. audit_sidebar."),
+    path: Path = typer.Option(Path("."), "--path", help="Target project directory."),
+) -> None:
+    """Generate a Forge plugin package under ``app/plugins/<name>/`` (routes + registry hooks)."""
+    _validate_module_name(plugin_name)
+    project_dir = path.resolve()
+    if not project_dir.exists():
+        raise typer.BadParameter(f"Project path does not exist: {project_dir}")
+    _require_app_dir(project_dir)
+    ctx = build_generator_context(plugin_name)
+    plugin_root = project_dir / "app" / "plugins" / ctx.name
+    if plugin_root.exists():
+        raise typer.BadParameter(f"Plugin already exists: {plugin_root}")
+    for relative_path, content in render_plugin_templates(ctx).items():
+        destination = project_dir / relative_path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(content, encoding="utf-8")
+    typer.echo(f"Plugin scaffold created at: {plugin_root}")
 

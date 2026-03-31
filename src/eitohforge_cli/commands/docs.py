@@ -16,6 +16,12 @@ _DOC_TOPICS: dict[str, tuple[str, str]] = {
     "cookbook": ("Cookbook", "docs/guides/cookbook.md"),
     "runbook": ("Operations runbook", "docs/guides/operations-runbook.md"),
     "architecture": ("Architecture blueprint", "secure_backend_sdk_architecture.md"),
+    "diagrams": ("Platform diagrams (Mermaid)", "docs/architecture/platform-overview.md"),
+    "plugins": ("Plugins guide", "docs/guides/plugins.md"),
+    "providers": ("Infrastructure providers guide", "docs/guides/providers.md"),
+    "policy": ("Policy guide (RBAC, ABAC, DSL, storage)", "docs/guides/policy.md"),
+    "multi-db": ("Multi-database registry and repository bindings", "docs/guides/multi-database-routing.md"),
+    "api-contract": ("API JSON envelope middleware", "docs/guides/api-contract-envelope.md"),
 }
 
 
@@ -28,7 +34,19 @@ def docs_list() -> None:
 
 @docs_app.command("path")
 def docs_path(
-    topic: Literal["readme", "usage", "realtime", "profiles", "cookbook", "runbook", "architecture"] = typer.Argument(
+    topic: Literal[
+        "readme",
+        "usage",
+        "realtime",
+        "profiles",
+        "cookbook",
+        "runbook",
+        "architecture",
+        "diagrams",
+        "plugins",
+        "providers",
+        "policy",
+    ] = typer.Argument(
         ..., help="Documentation topic key."
     ),
 ) -> None:

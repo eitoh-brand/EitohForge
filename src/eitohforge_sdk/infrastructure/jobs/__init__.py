@@ -4,6 +4,7 @@ from eitohforge_sdk.infrastructure.jobs.contracts import (
     BackgroundJobQueue,
     JobEnvelope,
     JobHandler,
+    JobPublisher,
     JobResult,
     RetryPolicy,
 )
@@ -14,6 +15,7 @@ __all__ = [
     "InMemoryBackgroundJobQueue",
     "JobEnvelope",
     "JobHandler",
+    "JobPublisher",
     "JobResult",
     "RetryPolicy",
 ]

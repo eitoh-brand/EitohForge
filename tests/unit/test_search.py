@@ -3,6 +3,7 @@ from __future__ import annotations
 from eitohforge_sdk.core.config import AppSettings, SearchSettings
 from eitohforge_sdk.infrastructure.search import (
     InMemorySearchProvider,
+    MeilisearchProvider,
     OpenSearchProvider,
     SearchDocument,
     SearchQuery,
@@ -65,3 +66,17 @@ def test_build_search_provider_returns_opensearch_for_external_modes() -> None:
     provider = build_search_provider(settings, client=FakeClient())
     assert isinstance(provider, OpenSearchProvider)
     assert provider.ping() is True
+
+
+def test_build_search_provider_returns_meilisearch() -> None:
+    settings = AppSettings(
+        search=SearchSettings(
+            enabled=True,
+            provider="meilisearch",
+            hosts="http://localhost:7700",
+            index_prefix="forge",
+            api_key="dev-key",
+        )
+    )
+    provider = build_search_provider(settings)
+    assert isinstance(provider, MeilisearchProvider)

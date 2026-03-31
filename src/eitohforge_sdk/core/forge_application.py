@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 
+from eitohforge_sdk.core.api_contract_middleware import ApiContractRule, register_api_contract_middleware
 from eitohforge_sdk.core.api_version_deprecation import register_api_version_deprecation_middleware
 from eitohforge_sdk.core.audit import AuditRule, register_audit_middleware
 from eitohforge_sdk.core.capabilities import register_capabilities_endpoint
@@ -244,6 +245,11 @@ def build_forge_app(*, build: ForgeAppBuildConfig) -> FastAPI:
     if on("security_context", True):
         register_security_context_middleware(app)
     register_error_handlers(app, build.error_registry or build_default_error_registry())
+    if on("api_contract", settings.api_contract.enforce_json_envelope):
+        register_api_contract_middleware(
+            app,
+            rule=ApiContractRule(enabled=True),
+        )
 
     if build.wire_health_family and on("health", True):
         register_health_endpoints(app, settings_provider=settings_provider)

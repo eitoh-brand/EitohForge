@@ -14,10 +14,11 @@ from eitohforge_sdk.infrastructure.storage.contracts import (
     StorageObject,
     StorageProvider,
 )
+from eitohforge_sdk.infrastructure.storage.presigned_urls import PresignedObjectUrlsMixin
 
 
 @dataclass(frozen=True)
-class TenantScopedStorageProvider:
+class TenantScopedStorageProvider(PresignedObjectUrlsMixin):
     """Prefix storage keys with the current tenant id (best-effort)."""
 
     delegate: StorageProvider
@@ -67,6 +68,13 @@ class TenantScopedStorageProvider:
         return delegate.generate_presigned_put_url(
             self._namespaced_key(key), expires_in=expires_in, content_type=content_type
         )
+
+    def generate_public_url(self, key: str) -> str:
+        delegate = self.delegate
+        if not hasattr(delegate, "generate_public_url"):
+            raise TypeError("Underlying storage provider does not support public object URLs.")
+        gen = getattr(delegate, "generate_public_url")
+        return gen(self._namespaced_key(key))
 
     def _as_presignable_delegate(self) -> PresignableStorageProvider:
         delegate = self.delegate

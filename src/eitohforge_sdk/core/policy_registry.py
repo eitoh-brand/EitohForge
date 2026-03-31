@@ -1,4 +1,4 @@
-"""Named policy registry for composing ABAC-style rules without a full DSL yet."""
+"""Named policy registry for composing ABAC-style rules (including :mod:`eitohforge_sdk.core.policy_dsl`)."""
 
 from __future__ import annotations
 

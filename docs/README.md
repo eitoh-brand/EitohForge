@@ -6,8 +6,22 @@ This folder contains the long-term planning and implementation documentation for
 
 ## Documents
 
+- `architecture/platform-overview.md`  
+  Mermaid diagrams for layered composition, HTTP middleware flow, plugin wiring, realtime Redis fan-out, and policy evaluation.
+- `guides/plugins.md`  
+  Plugin registry, typed hook protocols, and `eitohforge create plugin`.
+- `guides/providers.md`  
+  Infrastructure providers (search, storage, cache, jobs), factories, optional extras, and `eitohforge create provider`.
+- `guides/policy.md`  
+  RBAC vs ABAC, Policy DSL, `PolicyRegistry`, and storage access policies.
+- `guides/api-contract-envelope.md`  
+  Optional JSON response envelope validation (`success` / `error`) via API contract middleware.
+- `guides/multi-database-routing.md`  
+  `DatabaseRegistry`, `RepositoryBindingMap`, and `build_database_registry` roles (`primary` / `analytics` / `search`).
 - `roadmap/master-implementation-roadmap.md`  
   Full end-to-end phase plan (scope, milestones, acceptance criteria).
+- `roadmap/framework-evolution-v0.2-to-v1.md`  
+  Platform framework checklist (repositories, providers, releases v0.2→v1.0); updated with implementation status.
 - `roadmap/execution-board.md`  
   Task-level execution board with IDs, estimates, dependencies, and done criteria.
 - `roadmap/architecture-coverage-matrix.md`  

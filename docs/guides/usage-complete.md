@@ -77,7 +77,7 @@ Key groups:
 | Feature flags | `EITOHFORGE_FEATURE_FLAGS_` | endpoint path, enable |
 | Security hardening | `EITOHFORGE_SECURITY_HARDENING_` | hosts, max body, headers |
 | Observability | `EITOHFORGE_OBSERVABILITY_` | request logging/metrics/tracing; optional Prometheus `/metrics` + OTEL OTLP traces. |
-| Secret management | `EITOHFORGE_SECRET_` | secret provider selection (`env` / `vault` / `aws` / `azure`). **Vault:** KV reads via `VAULT_TOKEN` (or `EITOHFORGE_SECRET_VAULT_TOKEN`). **AWS:** install `boto3` (`pip install 'eitohforge[aws]'`); uses `EITOHFORGE_SECRET_AWS_REGION` / `AWS_DEFAULT_REGION`. **Azure Key Vault:** set `EITOHFORGE_SECRET_AZURE_VAULT_URL` and `AZURE_KEY_VAULT_TOKEN` (AAD bearer for `https://vault.azure.net/.default`). |
+| Secret management | `EITOHFORGE_SECRET_` | secret provider selection (`env` / `vault` / `aws` / `azure` / `gcp`). **Vault:** KV reads via `VAULT_TOKEN` (or `EITOHFORGE_SECRET_VAULT_TOKEN`). **AWS:** install `boto3` (`pip install 'eitohforge[aws]'`); uses `EITOHFORGE_SECRET_AWS_REGION` / `AWS_DEFAULT_REGION`. **Azure Key Vault:** set `EITOHFORGE_SECRET_AZURE_VAULT_URL` and `AZURE_KEY_VAULT_TOKEN` (AAD bearer for `https://vault.azure.net/.default`). **GCP Secret Manager:** `EITOHFORGE_SECRET_PROVIDER=gcp`, `EITOHFORGE_SECRET_GCP_PROJECT_ID`, and `pip install 'eitohforge[gcp-secrets]'` (or add `google-cloud-secret-manager` to dev/prod deps). |
 
 Capability discovery for clients:
 
@@ -112,6 +112,26 @@ CI enforces migration policy via `scripts/check_migration_policy.py` (destructiv
 
 - Implement a `PluginModule` (name + optional `register_routes` / `register_providers` / `register_events`).
 - Register with `PluginRegistry` and call `apply(...)` during startup.
+
+### Enterprise (optional): Saga, Domain Events, API Contract
+
+Enable these features when you need stronger cross-service orchestration and response-shape guarantees.
+
+- **Saga orchestration**: use `SagaOrchestrator` for step/compensation flows; use `SagaManager` to register and run named sagas.
+- **Domain events**: model domain signals with `DomainEvent` and publish via `DomainEventPublisher` to an `EventBus` implementation.
+- **API contract middleware**: enforce JSON envelope shape (`success`, and `error.code`/`error.message` when `success=false`).
+
+Enable API contract enforcement:
+
+```bash
+EITOHFORGE_API_CONTRACT_ENFORCE_JSON_ENVELOPE=true
+```
+
+Notes:
+
+- Middleware excludes operational/docs paths such as `/docs`, `/openapi.json`, `/health`, `/ready`, `/status`, `/metrics`, and `/sdk/capabilities`.
+- Invalid JSON envelopes are converted to `500` responses with `INVALID_API_ENVELOPE`.
+- Full guide: `docs/guides/api-contract-envelope.md`.
 
 ## 7) Deploy and operate
 
@@ -151,10 +171,11 @@ See each example’s `README.md` for run and test commands.
 
 ## 11) Further reading
 
-- `docs/guides/cookbook.md`
+- `docs/guides/cookbook.md` (includes **§11 Enterprise (Phase 5)**: saga, domain events, API envelope)
 - `docs/guides/realtime-websocket.md`
 - `docs/guides/forge-profiles.md` (includes `forge_platform_toggles_uniform`)
 - `docs/guides/query-spec-reference.md` — `QuerySpec` operators and `SQLAlchemyRepository` behavior
+- `docs/guides/multi-database-routing.md` — `DatabaseRegistry`, `RepositoryBindingMap`, and multi-role engines
 - Repository root `secure_backend_sdk_architecture.md` — specification; see its appendix for implementation coverage vs §1–§44
 - `docs/guides/enterprise-readiness-checklist.md`
 - `docs/guides/testing-and-example-project-strategy.md`

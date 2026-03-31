@@ -36,15 +36,24 @@ def build_storage_public_url(key: str, settings: StorageSettings) -> str:
     return rewriter.build_cdn_url(key)
 
 
+def resolve_s3_origin_base_url(*, bucket_name: str, region: str, endpoint_url: str | None) -> str:
+    """HTTPS origin for object keys (no trailing slash), shared by CDN builder and S3 provider."""
+    if endpoint_url:
+        endpoint = _normalize_base_url(endpoint_url)
+        return f"{endpoint}/{bucket_name}"
+    return f"https://{bucket_name}.s3.{region}.amazonaws.com"
+
+
 def _resolve_origin_base_url(settings: StorageSettings) -> str:
     if settings.public_base_url:
         return settings.public_base_url
     provider = settings.provider.lower()
     if provider == "s3":
-        if settings.endpoint_url:
-            endpoint = _normalize_base_url(settings.endpoint_url)
-            return f"{endpoint}/{settings.bucket_name}"
-        return f"https://{settings.bucket_name}.s3.{settings.region}.amazonaws.com"
+        return resolve_s3_origin_base_url(
+            bucket_name=settings.bucket_name,
+            region=settings.region,
+            endpoint_url=settings.endpoint_url,
+        )
     return "http://localhost/storage"
 
 

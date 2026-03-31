@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import re
-from dataclasses import asdict, is_dataclass
 from collections.abc import Sequence
+from dataclasses import asdict, is_dataclass
 from datetime import datetime
 from typing import Any, Callable, Generic, Mapping, TypeVar
 from uuid import uuid4
@@ -13,7 +13,9 @@ from sqlalchemy import Select, false as sa_false, func, inspect, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from eitohforge_sdk.application.dto.repository import (
+    FilterCondition,
     PaginationMode,
+    PaginationSpec,
     QuerySpec,
     RepositoryContext,
     SortDirection,
@@ -22,6 +24,8 @@ from eitohforge_sdk.application.dto.repository import (
 from eitohforge_sdk.core.config import get_settings
 from eitohforge_sdk.core.tenant import TenantContext
 from eitohforge_sdk.domain.repositories.contracts import PageResult, RepositoryContract
+from eitohforge_sdk.domain.repositories.query_coalesce import coalesce_query_spec
+from eitohforge_sdk.domain.repositories.specification import Specification
 
 
 TEntity = TypeVar("TEntity")
@@ -115,33 +119,61 @@ class SQLAlchemyRepository(
             return True
 
     async def list(
-        self, query: QuerySpec, context: RepositoryContext | None = None
+        self,
+        query: QuerySpec | None = None,
+        context: RepositoryContext | None = None,
+        *,
+        filters: Sequence[FilterCondition | Specification] | None = None,
+        sort: SortSpec | None = None,
+        sorts: Sequence[SortSpec] | None = None,
+        pagination: PaginationSpec | None = None,
     ) -> tuple[TEntity, ...]:
+        resolved = coalesce_query_spec(
+            query,
+            filters=filters,
+            sort=sort,
+            sorts=sorts,
+            pagination=pagination,
+        )
         with self._session_factory() as session:
             self._apply_tenant_schema_isolation(session, context)
-            statement = self._apply_query(self._base_statement(context), query)
-            statement = self._apply_pagination(statement, query)
+            statement = self._apply_query(self._base_statement(context), resolved)
+            statement = self._apply_pagination(statement, resolved)
             models = session.scalars(statement).all()
             return tuple(self._to_entity(model) for model in models)
 
     async def paginate(
-        self, query: QuerySpec, context: RepositoryContext | None = None
+        self,
+        query: QuerySpec | None = None,
+        context: RepositoryContext | None = None,
+        *,
+        filters: Sequence[FilterCondition | Specification] | None = None,
+        sort: SortSpec | None = None,
+        sorts: Sequence[SortSpec] | None = None,
+        pagination: PaginationSpec | None = None,
     ) -> PageResult[TEntity]:
+        resolved = coalesce_query_spec(
+            query,
+            filters=filters,
+            sort=sort,
+            sorts=sorts,
+            pagination=pagination,
+        )
         with self._session_factory() as session:
             self._apply_tenant_schema_isolation(session, context)
             base_statement = self._base_statement(context)
             count_statement = select(func.count()).select_from(base_statement.subquery())
             total = int(session.scalar(count_statement) or 0)
 
-            statement = self._apply_query(base_statement, query)
-            statement = self._apply_pagination(statement, query)
+            statement = self._apply_query(base_statement, resolved)
+            statement = self._apply_pagination(statement, resolved)
             models = session.scalars(statement).all()
             items = tuple(self._to_entity(model) for model in models)
-            next_cursor = self._resolve_next_cursor(models, query, total)
+            next_cursor = self._resolve_next_cursor(models, resolved, total)
             return PageResult(
                 items=items,
                 total=total,
-                page_size=query.pagination.page_size,
+                page_size=resolved.pagination.page_size,
                 next_cursor=next_cursor,
             )
 

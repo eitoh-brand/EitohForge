@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Generic, Protocol, TypeVar, runtime_checkable
 
-from eitohforge_sdk.application.dto.repository import QuerySpec, RepositoryContext
+from eitohforge_sdk.application.dto.repository import (
+    FilterCondition,
+    PaginationSpec,
+    QuerySpec,
+    RepositoryContext,
+    SortSpec,
+)
+from eitohforge_sdk.domain.repositories.specification import Specification
 
 
 TEntity = TypeVar("TEntity", covariant=True)
@@ -41,13 +49,29 @@ class RepositoryContract(Protocol, Generic[TEntity, TCreate, TUpdate]):
     async def delete(self, entity_id: str, context: RepositoryContext | None = None) -> bool:
         """Delete an entity and return success status."""
 
-    async def list(self, query: QuerySpec, context: RepositoryContext | None = None) -> tuple[TEntity, ...]:
-        """Return entities matching query criteria."""
+    async def list(
+        self,
+        query: QuerySpec | None = None,
+        context: RepositoryContext | None = None,
+        *,
+        filters: Sequence[FilterCondition | Specification] | None = None,
+        sort: SortSpec | None = None,
+        sorts: Sequence[SortSpec] | None = None,
+        pagination: PaginationSpec | None = None,
+    ) -> tuple[TEntity, ...]:
+        """Return entities matching query criteria (``QuerySpec`` or ergonomic kwargs)."""
 
     async def paginate(
-        self, query: QuerySpec, context: RepositoryContext | None = None
+        self,
+        query: QuerySpec | None = None,
+        context: RepositoryContext | None = None,
+        *,
+        filters: Sequence[FilterCondition | Specification] | None = None,
+        sort: SortSpec | None = None,
+        sorts: Sequence[SortSpec] | None = None,
+        pagination: PaginationSpec | None = None,
     ) -> PageResult[TEntity]:
-        """Return paginated entity results."""
+        """Return paginated entity results (``QuerySpec`` or ergonomic kwargs)."""
 
     async def bulk_create(
         self, payloads: tuple[TCreate, ...], context: RepositoryContext | None = None

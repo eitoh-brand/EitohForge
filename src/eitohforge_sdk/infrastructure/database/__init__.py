@@ -8,11 +8,13 @@ from eitohforge_sdk.infrastructure.database.providers import (
     SqliteProvider,
 )
 from eitohforge_sdk.infrastructure.database.registry import DatabaseRegistry
+from eitohforge_sdk.infrastructure.database.repository_binding import RepositoryBindingMap
 from eitohforge_sdk.infrastructure.database.transaction import TransactionManager, UnitOfWork
 
 __all__ = [
     "DatabaseProvider",
     "DatabaseRegistry",
+    "RepositoryBindingMap",
     "MySQLProvider",
     "PostgresProvider",
     "SqliteProvider",

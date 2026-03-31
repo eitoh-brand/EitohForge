@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
 from typing import Any
@@ -101,6 +102,48 @@ class QuerySpec(BaseModel):
     filters: tuple[FilterCondition, ...] = ()
     sorts: tuple[SortSpec, ...] = ()
     pagination: PaginationSpec = Field(default_factory=PaginationSpec)
+
+
+QueryFilter = FilterCondition
+"""Alias for documentation and NestJS-style naming (same as ``FilterCondition``)."""
+
+
+def Filter(field: str, operator: str | FilterOperator, value: Any) -> FilterCondition:
+    """Build a filter using string operators (e.g. ``\"gt\"``) or ``FilterOperator``."""
+    op = operator if isinstance(operator, FilterOperator) else FilterOperator(operator)
+    return FilterCondition(field=field, operator=op, value=value)
+
+
+def Sort(field: str, direction: str | SortDirection = SortDirection.ASC) -> SortSpec:
+    """Build a sort spec using string direction (``\"asc\"`` / ``\"desc\"``) or ``SortDirection``."""
+    dir_ = direction if isinstance(direction, SortDirection) else SortDirection(direction)
+    return SortSpec(field=field, direction=dir_)
+
+
+def Page(page: int, page_size: int = 50, *, mode: PaginationMode = PaginationMode.OFFSET) -> PaginationSpec:
+    """1-based page index into ``PaginationSpec`` (offset is ``(page - 1) * page_size``)."""
+    if page < 1:
+        raise ValueError("Page must be >= 1 (1-based).")
+    return PaginationSpec(
+        page_size=page_size,
+        offset=(page - 1) * page_size,
+        mode=mode,
+    )
+
+
+def list_query(
+    *,
+    filters: Sequence[FilterCondition] = (),
+    sort: SortSpec | None = None,
+    sorts: Sequence[SortSpec] | None = None,
+    pagination: PaginationSpec | None = None,
+) -> QuerySpec:
+    """Construct a ``QuerySpec`` without mixing ``sort`` and ``sorts``."""
+    if sort is not None and sorts is not None:
+        raise ValueError("Pass either sort= or sorts=, not both.")
+    s = (sort,) if sort is not None else tuple(sorts or ())
+    p = pagination if pagination is not None else PaginationSpec()
+    return QuerySpec(filters=tuple(filters), sorts=s, pagination=p)
 
 
 class AuditMetadata(BaseModel):

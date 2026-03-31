@@ -1,7 +1,9 @@
 """Tests for platform-gap closures (flags, envelopes, registries, inbound HMAC)."""
 
 from eitohforge_sdk.application.dto.envelope import err, ok, paginated
-from eitohforge_sdk.core.abac import TenantMatchPolicy
+from eitohforge_sdk.core.abac import PolicyContext, TenantMatchPolicy
+from eitohforge_sdk.core.policy_dsl import expression_policy
+from eitohforge_sdk.core.security import SecurityPrincipal
 from eitohforge_sdk.core.feature_flags import FeatureFlagDefinition, FeatureFlagService
 from eitohforge_sdk.core.policy_registry import PolicyRegistry
 from eitohforge_sdk.infrastructure.engine_registry import EngineRegistry
@@ -15,11 +17,15 @@ def test_feature_flag_mapping_roundtrip() -> None:
         rollout_percentage=42,
         actor_allowlist=("a",),
         tenant_allowlist=("t",),
+        environment_allowlist=("prod",),
+        cohort_allowlist=("vip",),
     )
     m = d.to_mapping()
     d2 = FeatureFlagDefinition.from_mapping(m)
     assert d2.key == d.key
     assert d2.rollout_percentage == 42
+    assert d2.environment_allowlist == ("prod",)
+    assert d2.cohort_allowlist == ("vip",)
 
 
 def test_feature_flag_service_reload() -> None:
@@ -45,6 +51,16 @@ def test_policy_registry() -> None:
     reg.register("tenant", TenantMatchPolicy())
     assert reg.get("tenant") is not None
     assert "tenant" in reg.names()
+
+
+def test_policy_registry_expression_dsl() -> None:
+    reg = PolicyRegistry()
+    reg.register("id_present", expression_policy("id_present", "principal.actor_id != null"))
+    ctx = PolicyContext(
+        principal=SecurityPrincipal(actor_id="u1", roles=(), tenant_id=None),
+        attributes={},
+    )
+    assert reg.require("id_present").evaluate(ctx) is True
 
 
 def test_engine_registry() -> None:

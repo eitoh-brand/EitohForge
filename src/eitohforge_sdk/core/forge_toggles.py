@@ -31,6 +31,7 @@ class ForgePlatformToggles:
     feature_flags: bool | None = None
     realtime_websocket: bool | None = None
     https_redirect: bool | None = None
+    api_contract: bool | None = None
 
 
 def default_forge_platform_toggles() -> ForgePlatformToggles:
@@ -60,4 +61,5 @@ def forge_platform_toggles_uniform(*, enabled: bool) -> ForgePlatformToggles:
         feature_flags=enabled,
         realtime_websocket=enabled,
         https_redirect=enabled,
+        api_contract=enabled,
     )

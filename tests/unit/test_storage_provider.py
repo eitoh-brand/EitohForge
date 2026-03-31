@@ -41,6 +41,31 @@ def test_build_storage_provider_from_settings(tmp_path: Path) -> None:
     assert isinstance(provider, LocalStorageProvider)
 
 
+def test_build_storage_provider_minio_uses_s3_adapter(tmp_path: Path) -> None:
+    settings = AppSettings(
+        tenant={"enabled": False},
+        storage={
+            "provider": "minio",
+            "bucket_name": "files",
+            "region": "us-east-1",
+            "endpoint_url": "http://127.0.0.1:9000",
+        },
+    )
+    provider = build_storage_provider(settings, s3_client=object())
+    from eitohforge_sdk.infrastructure.storage import S3StorageProvider
+
+    assert isinstance(provider, S3StorageProvider)
+
+
+def test_build_storage_provider_azure_requires_connection_string(tmp_path: Path) -> None:
+    settings = AppSettings(
+        tenant={"enabled": False},
+        storage={"provider": "azure", "bucket_name": "container1"},
+    )
+    with pytest.raises(ValueError, match="Azure"):
+        build_storage_provider(settings, local_root_path=tmp_path / "storage")
+
+
 class _FakeS3Body:
     def __init__(self, data: bytes) -> None:
         self._data = data
@@ -94,8 +119,27 @@ def test_s3_storage_provider_supports_presigned_urls() -> None:
     assert "put_object" in put_url
     get_url = provider.generate_presigned_get_url("files/a.txt", expires_in=60)
     assert "get_object" in get_url
+    assert provider.generate_presigned_upload(
+        "files/upload.txt", expires_in=300, content_type="text/plain"
+    ) == put_url
+    assert provider.generate_presigned_download("files/a.txt", expires_in=60) == get_url
+    assert (
+        provider.generate_public_url("files/a.txt")
+        == "https://bucket.s3.us-east-1.amazonaws.com/files/a.txt"
+    )
     assert provider.delete("files/a.txt") is True
     assert provider.exists("files/a.txt") is False
+
+
+def test_s3_storage_provider_public_url_uses_explicit_base() -> None:
+    client = _FakeS3Client()
+    provider = S3StorageProvider(
+        bucket_name="bucket",
+        region="us-east-1",
+        client=client,
+        public_base_url="https://cdn.example/assets",
+    )
+    assert provider.generate_public_url("k.png") == "https://cdn.example/assets/k.png"
 
 
 def test_build_storage_provider_for_s3_settings() -> None:

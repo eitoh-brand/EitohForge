@@ -47,6 +47,12 @@ class RedisFanoutSocketHub:
     def room_presence(self, room: str) -> dict[str, tuple[str, ...]]:
         return self._inner.room_presence(room)
 
+    def connection_rooms(self, connection_id: str) -> tuple[str, ...]:
+        return self._inner.connection_rooms(connection_id)
+
+    def principal_for_connection(self, connection_id: str) -> SocketPrincipal | None:
+        return self._inner.principal_for_connection(connection_id)
+
     async def broadcast(
         self,
         *,

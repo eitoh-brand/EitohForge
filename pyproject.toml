@@ -42,6 +42,27 @@ dependencies = [
 aws = [
   "boto3>=1.35.0",
 ]
+azure-storage = [
+  "azure-storage-blob>=12.19.0",
+]
+gcs = [
+  "google-cloud-storage>=2.14.0",
+]
+firebase = [
+  "firebase-admin>=6.5.0",
+]
+mongo = [
+  "pymongo>=4.0",
+]
+gcp-secrets = [
+  "google-cloud-secret-manager>=2.16.0",
+]
+jobs-celery = [
+  "celery>=5.4.0",
+]
+jobs-dramatiq = [
+  "dramatiq>=1.17.0",
+]
 dev = [
   "pytest>=8.3.0",
   "pytest-cov>=6.2.0",
@@ -50,6 +71,11 @@ dev = [
   "build>=1.2.0",
   "httpx>=0.28.0",
   "uvicorn>=0.32.0",
+  "celery>=5.4.0",
+  "fakeredis>=2.0",
+  "mongomock>=4.0",
+  "pymongo>=4.0",
+  "google-cloud-secret-manager>=2.16.0",
 ]
 release = [
   "build>=1.2.0",

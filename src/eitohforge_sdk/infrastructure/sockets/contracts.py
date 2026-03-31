@@ -52,6 +52,14 @@ class SocketHub(Protocol):
 
     def room_presence(self, room: str) -> dict[str, tuple[str, ...]]: ...
 
+    def connection_rooms(self, connection_id: str) -> tuple[str, ...]:
+        """Rooms the connection has joined (normalized room names)."""
+        ...
+
+    def principal_for_connection(self, connection_id: str) -> SocketPrincipal | None:
+        """Resolved principal for a connection id, if still connected."""
+        ...
+
     async def broadcast(
         self,
         *,

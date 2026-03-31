@@ -25,6 +25,8 @@ Implement a plugin object with a unique `name`, optionally:
 
 Register it with `PluginRegistry.register(plugin)` and apply with `PluginRegistry.apply(...)`.
 
+Deep dive: `docs/guides/plugins.md`. Scaffold: `eitohforge create plugin <name> --path .`.
+
 ## 3) Roll Out a Feature Gradually
 
 Use `FeatureFlagService` and register:
@@ -97,6 +99,8 @@ Clients then use `/v1/openapi.json` and `/v2/openapi.json`. Combine with `regist
 
 Other workers must run a Redis `SUBSCRIBE` loop (or use a task queue) to consume those messages; the SDK does not start a background subscriber in the web process.
 
+For **typed domain payloads** (name, aggregate id/version, payload), use `DomainEvent` and `DomainEventPublisher` from `eitohforge_sdk.infrastructure.messaging.domain_events` (same bus interface).
+
 ## 10) Observability: Prometheus + OTEL
 
 ### Prometheus metrics (`/metrics`)
@@ -116,3 +120,12 @@ Request metrics are exported using a per-app Prometheus registry:
 - OTLP traces over HTTP (optional): `EITOHFORGE_OBSERVABILITY_OTEL_OTLP_HTTP_ENDPOINT`
 
 When enabled, responses include `x-trace-id` (derived from the active OTEL span context when available).
+
+## 11) Enterprise (Phase 5): saga, domain events, API envelope
+
+- **Sagas**: `SagaOrchestrator` with optional `on_compensation_failure`; `SagaManager` for named step lists. Use in application services for multi-step workflows with compensations.
+- **Domain events**: `DomainEvent` + `DomainEventPublisher` on your `EventBus` (see §9); Redis pub/sub for cross-process fan-out.
+- **API JSON envelope**: enforce `success` and structured `error` on JSON responses with `EITOHFORGE_API_CONTRACT_ENFORCE_JSON_ENVELOPE=true` (or `AppSettings.api_contract.enforce_json_envelope`).
+- **Non-SQL repositories**: `RedisJsonRepository` (JSON per key; shared `redis` dependency) and `MongoJsonRepository` (optional `eitohforge[mongo]`). For Elasticsearch/OpenSearch **search** indices, use `SearchProvider` / `build_search_provider`, not generic `RepositoryContract` adapters.
+
+Full narrative: `docs/guides/usage-complete.md` → **Plugins and extension → Enterprise (optional)**. Envelope details: `docs/guides/api-contract-envelope.md`. CLI: `eitohforge docs api-contract`. Multi-DB roles: `docs/guides/multi-database-routing.md` (`eitohforge docs multi-db`).

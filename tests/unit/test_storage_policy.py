@@ -6,6 +6,7 @@ from eitohforge_sdk.infrastructure.storage import (
     AuthenticatedActorPolicy,
     LocalStorageProvider,
     PolicyEnforcedStorageProvider,
+    PresignedObjectUrlsMixin,
     RoleStorageAccessPolicy,
     StorageAccessContext,
     StorageAction,
@@ -14,7 +15,7 @@ from eitohforge_sdk.infrastructure.storage import (
 )
 
 
-class _FakePresignStorageProvider(LocalStorageProvider):
+class _FakePresignStorageProvider(PresignedObjectUrlsMixin, LocalStorageProvider):
     def generate_presigned_get_url(self, key: str, *, expires_in: int) -> str:
         return f"https://signed/get/{key}?exp={expires_in}"
 
@@ -69,4 +70,17 @@ def test_policy_enforced_storage_supports_presignable_delegate(tmp_path: Path) -
     )
     assert "signed/put" in url
     assert "exp=120" in url
+    dl = provider.generate_presigned_download("acme/upload.txt", expires_in=30)
+    assert "signed/get" in dl
+    assert "exp=30" in dl
+
+
+def test_policy_enforced_generate_public_url_requires_delegate(tmp_path: Path) -> None:
+    provider = PolicyEnforcedStorageProvider(
+        delegate=LocalStorageProvider(root_path=tmp_path / "storage"),
+        context_provider=lambda: StorageAccessContext(actor_id="u1", tenant_id="acme"),
+        policies=(AuthenticatedActorPolicy(), TenantPrefixPolicy()),
+    )
+    with pytest.raises(TypeError):
+        provider.generate_public_url("acme/file.txt")
 

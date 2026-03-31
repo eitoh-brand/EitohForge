@@ -164,6 +164,12 @@ class InMemorySocketHub:
             grouped[principal.actor_id].append(connection_id)
         return {actor_id: tuple(sorted(connection_ids)) for actor_id, connection_ids in grouped.items()}
 
+    def connection_rooms(self, connection_id: str) -> tuple[str, ...]:
+        return tuple(sorted(self._member_rooms.get(connection_id, set())))
+
+    def principal_for_connection(self, connection_id: str) -> SocketPrincipal | None:
+        return self._principals.get(connection_id)
+
     async def broadcast(
         self,
         *,

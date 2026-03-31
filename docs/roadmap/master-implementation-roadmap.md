@@ -1,5 +1,7 @@
 # EitohForge Backend SDK: Master Implementation Roadmap
 
+For the **platform framework evolution** checklist (repositories, providers, v0.2→v1.0 sequencing), see [framework-evolution-v0.2-to-v1.md](./framework-evolution-v0.2-to-v1.md).
+
 ## Objective
 
 Build a reusable FastAPI-based backend SDK platform that can scaffold production-ready services with:

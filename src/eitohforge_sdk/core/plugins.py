@@ -7,6 +7,8 @@ from typing import Any, Protocol
 
 from fastapi import FastAPI
 
+from eitohforge_sdk.core.plugin_contracts import EventsPlugin, ProviderPlugin, RoutePlugin
+
 
 class PluginModule(Protocol):
     """Plugin module contract."""
@@ -47,3 +49,6 @@ class PluginRegistry:
             if event_registry is not None and hasattr(plugin, "register_events"):
                 getattr(plugin, "register_events")(event_registry)
         return self.list_names()
+
+
+__all__ = ["EventsPlugin", "PluginModule", "PluginRegistry", "ProviderPlugin", "RoutePlugin"]

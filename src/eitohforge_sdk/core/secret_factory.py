@@ -14,6 +14,7 @@ from eitohforge_sdk.core.secrets import (
 from eitohforge_sdk.core.secrets_cloud import (
     AwsSecretsManagerSecretProvider,
     AzureKeyVaultSecretProvider,
+    GcpSecretManagerSecretProvider,
 )
 
 
@@ -34,5 +35,12 @@ def build_secret_provider(settings: AppSettings) -> SecretProvider:
         return AwsSecretsManagerSecretProvider(region_name=region)
     if provider_name == "azure":
         return AzureKeyVaultSecretProvider(vault_url=settings.secrets.azure_vault_url or "")
+    if provider_name == "gcp":
+        project = (settings.secrets.gcp_project_id or "").strip()
+        if not project:
+            raise ValueError(
+                "EITOHFORGE_SECRET_GCP_PROJECT_ID is required when EITOHFORGE_SECRET_PROVIDER=gcp."
+            )
+        return GcpSecretManagerSecretProvider(project_id=project)
     return UnconfiguredSecretProvider(provider_name=provider_name)
 

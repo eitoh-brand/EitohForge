@@ -53,8 +53,8 @@ class JobResult:
 JobHandler = Callable[[JobEnvelope], Awaitable[None] | None]
 
 
-class BackgroundJobQueue(Protocol):
-    """Background job queue adapter contract."""
+class JobPublisher(Protocol):
+    """Enqueue-only job API (Celery/Dramatiq workers execute out-of-process)."""
 
     def register_handler(self, job_name: str, handler: JobHandler) -> None:
         ...
@@ -67,6 +67,10 @@ class BackgroundJobQueue(Protocol):
         metadata: Mapping[str, str] | None = None,
     ) -> JobEnvelope:
         ...
+
+
+class BackgroundJobQueue(JobPublisher, Protocol):
+    """In-process queue with worker loop (``run_next`` / ``run_all_available``)."""
 
     async def run_next(self) -> JobResult | None:
         ...

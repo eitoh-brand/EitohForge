@@ -23,10 +23,12 @@ This README is intentionally **long-form for PyPI** and covers features, module 
 ## Gist (1 minute)
 
 - Install: `pip install eitohforge` (or `pipx install eitohforge` for CLI isolation)
+- Optional provider extras: `pip install eitohforge[aws]` (S3), `[azure-storage]` (Blob), `[gcs]`, `[firebase]` (FCM push), `[mongo]` (MongoDB repositories), `[gcp-secrets]` (GCP Secret Manager)
 - Scaffold + run REST API: `eitohforge create project my_service` -> `uvicorn app.main:app --reload`
+- Framework evolution checklist (repos, storage, releases): `docs/roadmap/framework-evolution-v0.2-to-v1.md`
 - Validate baseline routes: `GET /health`, `/ready`, `/status`, `/sdk/capabilities`; **interactive API docs (FastAPI)**: `/docs` (Swagger UI), `/redoc` (ReDoc), `GET /openapi.json` (OpenAPI schema)
 - Enable platform layers via env (CLI shortcut: `eitohforge config feature-set <name> --enabled true|false --env-file .env`): **security_hardening**, **audit**, **observability**, **jwt**, **https_redirect**, **idempotency**, **rate_limit**, **request_signing**, **tenant**, **feature_flags** (HTTP endpoint), **realtime**, **realtime_jwt** (socket handshake), **multi_db_analytics**, **multi_db_search** — run `eitohforge config feature-list` for the full key → `EITOHFORGE_*` map
-- Everything else is still **`EITOHFORGE_*`** (no separate CLI toggle yet): **cache**, **storage**, **search**, **secrets** (Vault/AWS/Azure), **webhooks**, **jobs**, **notifications**, **messaging** — see [Configuration and Environment Variables](#configuration-and-environment-variables) and [Feature Coverage](#feature-coverage-and-module-by-module-usage)
+- Everything else is still **`EITOHFORGE_*`** (no separate CLI toggle yet): **cache**, **storage**, **search**, **secrets** (Vault/AWS/Azure/GCP), **webhooks**, **jobs**, **notifications**, **messaging** — see [Configuration and Environment Variables](#configuration-and-environment-variables) and [Feature Coverage](#feature-coverage-and-module-by-module-usage)
 - Promote by stage: local/dev/staging/prod (UAT usually maps operationally to `staging`)
 - Scale topology when ready: multi-port local apps (`eitohforge dev`), multi-instance deploys, optional multi-DB/realtime fanout
 
@@ -205,7 +207,8 @@ This repo ships both a reusable SDK and an operator-focused CLI. The structure i
 |------|----------------|
 | `src/eitohforge_sdk/` | Runtime SDK used by generated apps: middleware, settings, infra contracts/adapters, realtime, observability, security layers. |
 | `src/eitohforge_cli/` | CLI for scaffolding and operations (`create`, `db`, `dev`, plus helper groups). |
-| `docs/guides/` | Multi-page operational docs (usage, profiles, websocket, runbook, cookbook). |
+| `docs/guides/` | Multi-page operational docs (usage, profiles, websocket, runbook, cookbook, **plugins / providers / policy**). |
+| `docs/architecture/` | Mermaid diagrams (`platform-overview.md`) for layers, middleware, plugins, realtime, policy. |
 | `docs/releases/` | Human-readable release notes by version. |
 | `examples/` | Working sample projects for minimal and enterprise patterns. |
 | `tests/unit/` | Unit tests for SDK and CLI behavior. |
@@ -1186,12 +1189,12 @@ These modules address common “framework maturity” gaps: contracts, persisten
 | **Repository contract** | `eitohforge_sdk.domain.BaseRepository` / `RepositoryContract` — `SQLAlchemyRepository` is the reference implementation. |
 | **Response envelopes** | `eitohforge_sdk.application.dto.ok`, `paginated`, `err` — thin helpers over `ApiResponse` / `PaginatedApiResponse` / `ApiErrorResponse`. |
 | **Feature flags + Redis** | `FeatureFlagDefinition.to_mapping` / `from_mapping`, `FeatureFlagService.reload`, `load_definitions_from_redis_json` / `save_definitions_to_redis_json`. |
-| **Secrets** | `EITOHFORGE_SECRET_PROVIDER=env|vault|aws|azure` — Vault (`VaultSecretProvider`), AWS Secrets Manager (`pip install 'eitohforge[aws]'` + `boto3`), Azure Key Vault REST (`AZURE_KEY_VAULT_TOKEN` + `EITOHFORGE_SECRET_AZURE_VAULT_URL`). |
+| **Secrets** | `EITOHFORGE_SECRET_PROVIDER=env|vault|aws|azure|gcp` — Vault (`VaultSecretProvider`), AWS Secrets Manager (`pip install 'eitohforge[aws]'` + `boto3`), Azure Key Vault REST (`AZURE_KEY_VAULT_TOKEN` + `EITOHFORGE_SECRET_AZURE_VAULT_URL`), GCP Secret Manager (`pip install 'eitohforge[gcp-secrets]'` + `EITOHFORGE_SECRET_GCP_PROJECT_ID`). |
 | **Inbound webhooks** | `register_inbound_webhook_router` — HMAC verification (timestamp-canonical or plain body digest). |
 | **SendGrid email** | `build_sendgrid_email_sender` + `InMemoryNotificationGateway.register_sender("email", sender)`. |
 | **Policy registry** | `PolicyRegistry` — register named `AccessPolicy` instances for composition and future DSL hooks. |
-| **Multi-engine DB routing** | `EngineRegistry` — named SQLAlchemy engines; for logical roles + `DatabaseProvider`, see `infrastructure.database.registry.DatabaseRegistry`. |
-| **CLI provider stub** | `eitohforge create provider <name> --path .` — scaffolds `app/providers/<name>.py`. |
+| **Multi-engine DB routing** | `EngineRegistry` — named SQLAlchemy engines; for logical roles + `DatabaseProvider` + `RepositoryBindingMap`, see `docs/guides/multi-database-routing.md` and `infrastructure.database.registry.DatabaseRegistry`. |
+| **CLI generators** | `eitohforge create module|provider|plugin <name> --path .` — `app/modules/`, `app/infrastructure/providers/`, `app/plugins/`. |
 
 ---
 

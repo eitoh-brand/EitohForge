@@ -6,14 +6,19 @@ APPLICATION_FILE_TEMPLATES: dict[str, str] = {
     "app/application/dto/__init__.py": """from app.application.dto.error import ApiError, ApiErrorDetail, ApiErrorResponse
 from app.application.dto.repository import (
     AuditMetadata,
+    Filter,
     FilterCondition,
     FilterOperator,
+    Page,
     PaginationMode,
     PaginationSpec,
+    QueryFilter,
     QuerySpec,
     RepositoryContext,
+    Sort,
     SortDirection,
     SortSpec,
+    list_query,
 )
 from app.application.dto.response import (
     ApiResponse,
@@ -24,6 +29,7 @@ from app.application.dto.response import (
 """,
     "app/application/dto/repository.py": """from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
 from typing import Any
@@ -97,6 +103,43 @@ class QuerySpec(BaseModel):
     filters: tuple[FilterCondition, ...] = ()
     sorts: tuple[SortSpec, ...] = ()
     pagination: PaginationSpec = Field(default_factory=PaginationSpec)
+
+
+QueryFilter = FilterCondition
+
+
+def Filter(field: str, operator: str | FilterOperator, value: Any) -> FilterCondition:
+    op = operator if isinstance(operator, FilterOperator) else FilterOperator(operator)
+    return FilterCondition(field=field, operator=op, value=value)
+
+
+def Sort(field: str, direction: str | SortDirection = SortDirection.ASC) -> SortSpec:
+    dir_ = direction if isinstance(direction, SortDirection) else SortDirection(direction)
+    return SortSpec(field=field, direction=dir_)
+
+
+def Page(page: int, page_size: int = 50, *, mode: PaginationMode = PaginationMode.OFFSET) -> PaginationSpec:
+    if page < 1:
+        raise ValueError("Page must be >= 1 (1-based).")
+    return PaginationSpec(
+        page_size=page_size,
+        offset=(page - 1) * page_size,
+        mode=mode,
+    )
+
+
+def list_query(
+    *,
+    filters: Sequence[FilterCondition] = (),
+    sort: SortSpec | None = None,
+    sorts: Sequence[SortSpec] | None = None,
+    pagination: PaginationSpec | None = None,
+) -> QuerySpec:
+    if sort is not None and sorts is not None:
+        raise ValueError("Pass either sort= or sorts=, not both.")
+    s = (sort,) if sort is not None else tuple(sorts or ())
+    p = pagination if pagination is not None else PaginationSpec()
+    return QuerySpec(filters=tuple(filters), sorts=s, pagination=p)
 
 
 class AuditMetadata(BaseModel):

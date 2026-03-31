@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Literal, Protocol
 
-NotificationChannel = Literal["email", "sms", "push"]
+NotificationChannel = Literal["email", "sms", "push", "whatsapp"]
 
 
 @dataclass(frozen=True)

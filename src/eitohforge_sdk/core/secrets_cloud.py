@@ -77,3 +77,40 @@ class AzureKeyVaultSecretProvider:
             return None
         val = data.get("value")
         return str(val) if val is not None else None
+
+
+@dataclass
+class GcpSecretManagerSecretProvider:
+    """Resolve secrets from Google Cloud Secret Manager (optional ``google-cloud-secret-manager``)."""
+
+    project_id: str
+
+    def get(self, key: str) -> str | None:
+        try:
+            from google.cloud import secretmanager  # type: ignore[import-not-found]
+        except ImportError as exc:  # pragma: no cover - optional dependency
+            raise ImportError(
+                "Install google-cloud-secret-manager to use GcpSecretManagerSecretProvider: "
+                "pip install 'eitohforge[gcp-secrets]'"
+            ) from exc
+
+        name = key.strip()
+        if not name:
+            return None
+        if not name.startswith("projects/"):
+            name = f"projects/{self.project_id}/secrets/{name}/versions/latest"
+        elif "/versions/" not in name:
+            name = f"{name}/versions/latest"
+
+        client = secretmanager.SecretManagerServiceClient()
+        try:
+            resp = client.access_secret_version(request={"name": name})
+        except Exception:
+            return None
+        data = getattr(resp, "payload", None)
+        raw = getattr(data, "data", None) if data is not None else None
+        if raw is None:
+            return None
+        if isinstance(raw, bytes):
+            return raw.decode("utf-8", errors="replace")
+        return str(raw)

@@ -7,6 +7,7 @@ from typing import Any
 from eitohforge_sdk.core.config import AppSettings, SearchSettings
 from eitohforge_sdk.infrastructure.search.contracts import SearchProvider
 from eitohforge_sdk.infrastructure.search.memory import InMemorySearchProvider
+from eitohforge_sdk.infrastructure.search.meilisearch import MeilisearchProvider
 from eitohforge_sdk.infrastructure.search.opensearch import OpenSearchProvider
 
 
@@ -38,5 +39,14 @@ def _build_search_provider_for_settings(
             password=settings.password,
             verify_certs=settings.verify_tls,
             client=client,
+        )
+    if provider == "meilisearch":
+        hosts = tuple(part.strip() for part in settings.hosts.split(",") if part.strip())
+        if not hosts:
+            raise ValueError("Meilisearch requires at least one base URL in search.hosts (e.g. http://localhost:7700).")
+        return MeilisearchProvider(
+            base_url=hosts[0],
+            index_prefix=settings.index_prefix,
+            api_key=settings.api_key,
         )
     raise ValueError(f"Unsupported search provider: {settings.provider}")

@@ -199,11 +199,12 @@ class SearchSettings(BaseSettings):
         extra="ignore",
     )
     enabled: bool = False
-    provider: Literal["memory", "opensearch", "elasticsearch"] = "memory"
+    provider: Literal["memory", "opensearch", "elasticsearch", "meilisearch"] = "memory"
     hosts: str = "http://localhost:9200"
     index_prefix: str = "eitohforge"
     username: str | None = None
     password: str | None = None
+    api_key: str | None = None
     verify_tls: bool = True
 
 
@@ -297,6 +298,8 @@ class StorageSettings(BaseSettings):
     presign_expires_seconds: int = Field(default=900, ge=1, le=604800)
     public_base_url: str | None = None
     cdn_base_url: str | None = None
+    azure_connection_string: str | None = None
+    gcs_project_id: str | None = None
 
 
 class SecretSettings(BaseSettings):
@@ -307,11 +310,12 @@ class SecretSettings(BaseSettings):
         env_file=(".env", ".env.local"),
         extra="ignore",
     )
-    provider: Literal["env", "vault", "aws", "azure"] = "env"
+    provider: Literal["env", "vault", "aws", "azure", "gcp"] = "env"
     vault_url: str | None = None
     vault_mount: str = "secret"
     aws_region: str | None = None
     azure_vault_url: str | None = None
+    gcp_project_id: str | None = None
 
 
 class AuthSettings(BaseSettings):
@@ -386,6 +390,17 @@ class ApiVersioningSettings(BaseSettings):
     v1_link_deprecation: str | None = None
 
 
+class ApiContractSettings(BaseSettings):
+    """Enforce unified JSON response envelopes on successful routes (optional)."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="EITOHFORGE_API_CONTRACT_",
+        env_file=(".env", ".env.local"),
+        extra="ignore",
+    )
+    enforce_json_envelope: bool = False
+
+
 class AppSettings(BaseSettings):
     """Top-level app settings."""
 
@@ -415,6 +430,7 @@ class AppSettings(BaseSettings):
     runtime: RuntimeSettings = Field(default_factory=RuntimeSettings)
     realtime: RealtimeSettings = Field(default_factory=RealtimeSettings)
     api_versioning: ApiVersioningSettings = Field(default_factory=ApiVersioningSettings)
+    api_contract: ApiContractSettings = Field(default_factory=ApiContractSettings)
     storage: StorageSettings = Field(default_factory=StorageSettings)
     secrets: SecretSettings = Field(default_factory=SecretSettings)
 

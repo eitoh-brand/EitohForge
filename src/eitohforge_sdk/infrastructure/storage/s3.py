@@ -5,10 +5,12 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
+from eitohforge_sdk.infrastructure.storage.cdn import resolve_s3_origin_base_url
 from eitohforge_sdk.infrastructure.storage.contracts import StorageObject
+from eitohforge_sdk.infrastructure.storage.presigned_urls import PresignedObjectUrlsMixin
 
 
-class S3StorageProvider:
+class S3StorageProvider(PresignedObjectUrlsMixin):
     """Store objects in an S3-compatible bucket."""
 
     def __init__(
@@ -17,12 +19,16 @@ class S3StorageProvider:
         bucket_name: str,
         region: str,
         endpoint_url: str | None = None,
+        public_base_url: str | None = None,
         aws_access_key_id: str | None = None,
         aws_secret_access_key: str | None = None,
         aws_session_token: str | None = None,
         client: Any | None = None,
     ) -> None:
         self._bucket_name = bucket_name
+        self._region = region
+        self._endpoint_url = endpoint_url
+        self._public_base_url = public_base_url.rstrip("/") if public_base_url else None
         self._client = client or self._build_client(
             region=region,
             endpoint_url=endpoint_url,
@@ -81,6 +87,18 @@ class S3StorageProvider:
                 ExpiresIn=expires_in,
             )
         )
+
+    def generate_public_url(self, key: str) -> str:
+        """Stable HTTPS URL for the object (not presigned); optional CDN still via ``build_storage_public_url``."""
+        base = self._public_base_url or resolve_s3_origin_base_url(
+            bucket_name=self._bucket_name,
+            region=self._region,
+            endpoint_url=self._endpoint_url,
+        )
+        normalized = key.strip().lstrip("/")
+        if not normalized:
+            raise ValueError("Storage key must not be empty.")
+        return f"{base}/{normalized}"
 
     @staticmethod
     def _build_client(

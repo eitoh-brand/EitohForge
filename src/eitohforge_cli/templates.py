@@ -8,6 +8,7 @@ from typing import Literal
 from jinja2 import Template
 
 from eitohforge_cli.template_parts.application_templates import APPLICATION_FILE_TEMPLATES
+from eitohforge_cli.template_parts.domain_repository_templates import DOMAIN_REPOSITORY_FILE_TEMPLATES
 from eitohforge_cli.template_parts.cache_templates import CACHE_FILE_TEMPLATES
 from eitohforge_cli.template_parts.core_templates import CORE_FILE_TEMPLATES
 from eitohforge_cli.template_parts.external_api_templates import EXTERNAL_API_FILE_TEMPLATES
@@ -335,13 +336,21 @@ class DateTimeRange:
         if self.start > self.end:
             raise DomainInvariantError("DateTimeRange requires start <= end.")
 """,
-    "app/domain/repositories/__init__.py": "",
+    **DOMAIN_REPOSITORY_FILE_TEMPLATES,
     "app/domain/repositories/contracts.py": """from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Generic, Protocol, TypeVar, runtime_checkable
 
-from app.application.dto.repository import QuerySpec, RepositoryContext
+from app.application.dto.repository import (
+    FilterCondition,
+    PaginationSpec,
+    QuerySpec,
+    RepositoryContext,
+    SortSpec,
+)
+from app.domain.repositories.specification import Specification
 
 
 TEntity = TypeVar("TEntity", covariant=True)
@@ -373,11 +382,27 @@ class RepositoryContract(Protocol, Generic[TEntity, TCreate, TUpdate]):
     async def delete(self, entity_id: str, context: RepositoryContext | None = None) -> bool:
         ...
 
-    async def list(self, query: QuerySpec, context: RepositoryContext | None = None) -> tuple[TEntity, ...]:
+    async def list(
+        self,
+        query: QuerySpec | None = None,
+        context: RepositoryContext | None = None,
+        *,
+        filters: Sequence[FilterCondition | Specification] | None = None,
+        sort: SortSpec | None = None,
+        sorts: Sequence[SortSpec] | None = None,
+        pagination: PaginationSpec | None = None,
+    ) -> tuple[TEntity, ...]:
         ...
 
     async def paginate(
-        self, query: QuerySpec, context: RepositoryContext | None = None
+        self,
+        query: QuerySpec | None = None,
+        context: RepositoryContext | None = None,
+        *,
+        filters: Sequence[FilterCondition | Specification] | None = None,
+        sort: SortSpec | None = None,
+        sorts: Sequence[SortSpec] | None = None,
+        pagination: PaginationSpec | None = None,
     ) -> PageResult[TEntity]:
         ...
 
@@ -659,13 +684,23 @@ from datetime import datetime
 from typing import Any, Callable, Generic, Mapping, TypeVar
 from uuid import uuid4
 
-from sqlalchemy import Select, func, inspect, select, text
+from sqlalchemy import Select, false as sa_false, func, inspect, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.application.dto.repository import PaginationMode, QuerySpec, RepositoryContext, SortDirection, SortSpec
+from app.application.dto.repository import (
+    FilterCondition,
+    PaginationMode,
+    PaginationSpec,
+    QuerySpec,
+    RepositoryContext,
+    SortDirection,
+    SortSpec,
+)
 from app.core.config import get_settings
 from app.core.tenant import TenantContext
 from app.domain.repositories.contracts import PageResult, RepositoryContract
+from app.domain.repositories.query_coalesce import coalesce_query_spec
+from app.domain.repositories.specification import Specification
 
 
 TEntity = TypeVar("TEntity")
@@ -757,33 +792,61 @@ class SQLAlchemyRepository(
             return True
 
     async def list(
-        self, query: QuerySpec, context: RepositoryContext | None = None
+        self,
+        query: QuerySpec | None = None,
+        context: RepositoryContext | None = None,
+        *,
+        filters: Sequence[FilterCondition | Specification] | None = None,
+        sort: SortSpec | None = None,
+        sorts: Sequence[SortSpec] | None = None,
+        pagination: PaginationSpec | None = None,
     ) -> tuple[TEntity, ...]:
+        resolved = coalesce_query_spec(
+            query,
+            filters=filters,
+            sort=sort,
+            sorts=sorts,
+            pagination=pagination,
+        )
         with self._session_factory() as session:
             self._apply_tenant_schema_isolation(session, context)
-            statement = self._apply_query(self._base_statement(context), query)
-            statement = self._apply_pagination(statement, query)
+            statement = self._apply_query(self._base_statement(context), resolved)
+            statement = self._apply_pagination(statement, resolved)
             models = session.scalars(statement).all()
             return tuple(self._to_entity(model) for model in models)
 
     async def paginate(
-        self, query: QuerySpec, context: RepositoryContext | None = None
+        self,
+        query: QuerySpec | None = None,
+        context: RepositoryContext | None = None,
+        *,
+        filters: Sequence[FilterCondition | Specification] | None = None,
+        sort: SortSpec | None = None,
+        sorts: Sequence[SortSpec] | None = None,
+        pagination: PaginationSpec | None = None,
     ) -> PageResult[TEntity]:
+        resolved = coalesce_query_spec(
+            query,
+            filters=filters,
+            sort=sort,
+            sorts=sorts,
+            pagination=pagination,
+        )
         with self._session_factory() as session:
             self._apply_tenant_schema_isolation(session, context)
             base_statement = self._base_statement(context)
             count_statement = select(func.count()).select_from(base_statement.subquery())
             total = int(session.scalar(count_statement) or 0)
 
-            statement = self._apply_query(base_statement, query)
-            statement = self._apply_pagination(statement, query)
+            statement = self._apply_query(base_statement, resolved)
+            statement = self._apply_pagination(statement, resolved)
             models = session.scalars(statement).all()
             items = tuple(self._to_entity(model) for model in models)
-            next_cursor = self._resolve_next_cursor(models, query, total)
+            next_cursor = self._resolve_next_cursor(models, resolved, total)
             return PageResult(
                 items=items,
                 total=total,
-                page_size=query.pagination.page_size,
+                page_size=resolved.pagination.page_size,
                 next_cursor=next_cursor,
             )
 
@@ -831,7 +894,7 @@ class SQLAlchemyRepository(
         if not self._SCHEMA_NAME_RE.match(schema_name):
             raise ValueError(f"Invalid tenant schema name resolved from tenant_id={tenant_id!r}.")
 
-        session.execute(f'SET LOCAL search_path TO "{schema_name}"')
+        session.execute(text(f'SET LOCAL search_path TO "{schema_name}"'))
 
     def _base_statement(self, context: RepositoryContext | None) -> Select[Any]:
         statement = select(self._model_type)
@@ -871,11 +934,17 @@ class SQLAlchemyRepository(
             elif operator == "in":
                 values = self._extract_in_values(condition.value)
                 if values is not None:
-                    statement = statement.where(column.in_(values))
+                    if len(values) == 0:
+                        statement = statement.where(sa_false())
+                    else:
+                        statement = statement.where(column.in_(values))
             elif operator == "not_in":
                 values = self._extract_in_values(condition.value)
                 if values is not None:
-                    statement = statement.where(column.not_in(values))
+                    if len(values) == 0:
+                        pass
+                    else:
+                        statement = statement.where(column.not_in(values))
             elif operator == "exists":
                 if bool(condition.value):
                     statement = statement.where(column.is_not(None))

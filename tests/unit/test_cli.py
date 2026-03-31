@@ -114,9 +114,26 @@ def test_create_provider_generates_stub() -> None:
         assert result.exit_code == 0
         prov = runner.invoke(app, ["create", "provider", "email_sendgrid", "--path", "my_service"])
         assert prov.exit_code == 0
-        target = Path("my_service/app/providers/email_sendgrid.py")
+        target = Path("my_service/app/infrastructure/providers/email_sendgrid.py")
         assert target.exists()
-        assert "configure" in target.read_text(encoding="utf-8")
+        text = target.read_text(encoding="utf-8")
+        assert "InMemoryEmailSendgridProvider" in text
+        assert "build_email_sendgrid_provider" in text
+
+
+def test_create_module_and_plugin_generates_scaffolds() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(app, ["create", "project", "my_service"]).exit_code == 0
+        mod = runner.invoke(app, ["create", "module", "invoicing", "--path", "my_service"])
+        assert mod.exit_code == 0
+        assert Path("my_service/app/modules/invoicing/router.py").exists()
+        plg = runner.invoke(app, ["create", "plugin", "audit_sidebar", "--path", "my_service"])
+        assert plg.exit_code == 0
+        assert Path("my_service/app/plugins/audit_sidebar/plugin.py").exists()
+        plugin_src = Path("my_service/app/plugins/audit_sidebar/plugin.py").read_text(encoding="utf-8")
+        assert "class AuditSidebarPlugin" in plugin_src
+        assert "register_routes" in plugin_src
 
 
 def test_create_pseudocode_generates_guide_file() -> None:

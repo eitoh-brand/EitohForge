@@ -10,6 +10,7 @@ from eitohforge_sdk.core.secrets import (
     VaultSecretProvider,
     require_secret,
 )
+from eitohforge_sdk.core.secrets_cloud import GcpSecretManagerSecretProvider
 
 
 def test_env_secret_provider_reads_process_environment(monkeypatch) -> None:
@@ -30,6 +31,24 @@ def test_secret_factory_builds_env_provider(monkeypatch) -> None:
     settings = AppSettings()
     provider = build_secret_provider(settings)
     assert isinstance(provider, EnvSecretProvider)
+
+
+def test_secret_factory_builds_gcp_provider(monkeypatch) -> None:
+    monkeypatch.setenv("EITOHFORGE_AUTH_JWT_SECRET", "x" * 32)
+    monkeypatch.setenv("EITOHFORGE_SECRET_PROVIDER", "gcp")
+    monkeypatch.setenv("EITOHFORGE_SECRET_GCP_PROJECT_ID", "my-gcp-project")
+    settings = AppSettings()
+    provider = build_secret_provider(settings)
+    assert isinstance(provider, GcpSecretManagerSecretProvider)
+
+
+def test_secret_factory_gcp_requires_project_id(monkeypatch) -> None:
+    monkeypatch.setenv("EITOHFORGE_AUTH_JWT_SECRET", "x" * 32)
+    monkeypatch.setenv("EITOHFORGE_SECRET_PROVIDER", "gcp")
+    monkeypatch.delenv("EITOHFORGE_SECRET_GCP_PROJECT_ID", raising=False)
+    settings = AppSettings()
+    with pytest.raises(ValueError, match="GCP_PROJECT_ID"):
+        build_secret_provider(settings)
 
 
 def test_secret_factory_builds_unconfigured_provider_for_vault(monkeypatch) -> None:

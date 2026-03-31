@@ -1,5 +1,6 @@
 """Core SDK modules."""
 
+from eitohforge_sdk.core.api_contract_middleware import ApiContractRule, register_api_contract_middleware
 from eitohforge_sdk.core.api_version_deprecation import register_api_version_deprecation_middleware
 from eitohforge_sdk.core.api_versioning import ApiVersion, build_versioned_router, register_versioned_routers
 from eitohforge_sdk.core.audit import (
@@ -86,6 +87,7 @@ from eitohforge_sdk.core.feature_flags import (
     FeatureFlagService,
     FeatureFlagTargetingContext,
     register_feature_flags_endpoint,
+    targeting_context_from_user,
 )
 from eitohforge_sdk.core.idempotency import (
     IdempotencyRecord,
@@ -141,7 +143,16 @@ from eitohforge_sdk.core.tenant import (
     get_request_tenant_context,
     register_tenant_context_middleware,
 )
+from eitohforge_sdk.core.plugin_contracts import EventsPlugin, ProviderPlugin, RoutePlugin
 from eitohforge_sdk.core.plugins import PluginModule, PluginRegistry
+from eitohforge_sdk.core.policy_dsl import (
+    ExpressionAccessPolicy,
+    PolicyEvaluationError,
+    PolicySyntaxError,
+    eval_expr,
+    expression_policy,
+    parse_expr,
+)
 from eitohforge_sdk.core.policy_registry import PolicyRegistry
 
 __all__ = [
@@ -165,9 +176,16 @@ __all__ = [
     "FeatureFlagDefinition",
     "FeatureFlagTargetingContext",
     "FeatureFlagService",
+    "targeting_context_from_user",
     "load_definitions_from_redis_json",
     "save_definitions_to_redis_json",
+    "ExpressionAccessPolicy",
+    "PolicyEvaluationError",
     "PolicyRegistry",
+    "PolicySyntaxError",
+    "eval_expr",
+    "expression_policy",
+    "parse_expr",
     "InMemoryRefreshTokenStore",
     "InMemorySessionStore",
     "InMemorySsoLinkStore",
@@ -227,8 +245,11 @@ __all__ = [
     "TenantContext",
     "TenantIsolationRule",
     "TenantIsolationError",
+    "EventsPlugin",
     "PluginModule",
     "PluginRegistry",
+    "ProviderPlugin",
+    "RoutePlugin",
     "abac_required",
     "attributes_from_request",
     "assert_roles",
@@ -250,6 +271,8 @@ __all__ = [
     "rbac_required",
     "register_capabilities_endpoint",
     "register_audit_middleware",
+    "ApiContractRule",
+    "register_api_contract_middleware",
     "register_api_version_deprecation_middleware",
     "register_versioned_routers",
     "register_idempotency_middleware",

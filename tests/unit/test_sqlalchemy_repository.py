@@ -13,12 +13,15 @@ from sqlalchemy import DateTime, Integer, String, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 from eitohforge_sdk.application.dto.repository import (
+    Filter,
     FilterCondition,
     FilterOperator,
+    Page,
     PaginationMode,
     PaginationSpec,
     QuerySpec,
     RepositoryContext,
+    Sort,
     SortDirection,
     SortSpec,
 )
@@ -132,6 +135,30 @@ def test_sqlalchemy_repository_crud_bulk_list_paginate(tmp_path: Path) -> None:
     deleted = asyncio.run(repository.delete("u-a", tenant_a_ctx))
     assert deleted is True
     assert asyncio.run(repository.get("u-a", tenant_a_ctx)) is None
+
+
+def test_sqlalchemy_repository_list_accepts_filter_sort_page_kwargs(tmp_path: Path) -> None:
+    repository = _build_repository(tmp_path)
+    context = RepositoryContext(actor_id="actor-a", tenant_id="tenant-a")
+    asyncio.run(
+        repository.bulk_create(
+            (
+                {"id": "u-1", "name": "Young", "email": "y@e.com", "score": 10},
+                {"id": "u-2", "name": "Adult", "email": "a@e.com", "score": 30},
+            ),
+            context,
+        )
+    )
+    items = asyncio.run(
+        repository.list(
+            filters=(Filter("score", "gt", 15),),
+            sort=Sort("name", "asc"),
+            pagination=Page(1, 1),
+            context=context,
+        )
+    )
+    assert len(items) == 1
+    assert items[0].name == "Adult"
 
 
 def test_sqlalchemy_repository_supports_between_in_not_in_and_sort(tmp_path: Path) -> None:
