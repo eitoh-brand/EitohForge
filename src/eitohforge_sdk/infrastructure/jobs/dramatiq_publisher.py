@@ -6,7 +6,7 @@ import importlib
 import inspect
 import json
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Coroutine, cast
 from uuid import uuid4
 
 from eitohforge_sdk.infrastructure.jobs.contracts import JobEnvelope, JobHandler, JobPublisher
@@ -30,7 +30,7 @@ def _ensure_actor(dramatiq: Any) -> Any:
     if _actor is not None:
         return _actor
 
-    @dramatiq.actor(queue_name="eitohforge", max_retries=0)
+    @dramatiq.actor(queue_name="eitohforge", max_retries=0)  # type: ignore[untyped-decorator]
     def dispatch_job(
         job_name: str,
         job_id: str,
@@ -52,7 +52,8 @@ def _ensure_actor(dramatiq: Any) -> Any:
         if inspect.isawaitable(maybe):
             import asyncio
 
-            asyncio.run(maybe)
+            coro = cast(Coroutine[Any, Any, None], maybe)
+            asyncio.run(coro)
 
     _actor = dispatch_job
     return _actor

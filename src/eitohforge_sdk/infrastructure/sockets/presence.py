@@ -53,12 +53,12 @@ def _merge_status(statuses: list[PresenceStatus]) -> PresenceStatus:
 
 def _merge_metadata(
     connection_ids: tuple[str, ...],
-    meta: dict[str, Mapping[str, Any]],
+    meta: Mapping[str, Any],
 ) -> dict[str, Any]:
     merged: dict[str, Any] = {}
     for cid in sorted(connection_ids):
         m = meta.get(cid)
-        if m:
+        if isinstance(m, Mapping):
             merged.update(dict(m))
     return merged
 

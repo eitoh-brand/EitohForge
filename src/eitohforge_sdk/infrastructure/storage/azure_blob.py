@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from eitohforge_sdk.infrastructure.storage.contracts import StorageObject
 from eitohforge_sdk.infrastructure.storage.presigned_urls import PresignedObjectUrlsMixin
@@ -31,15 +31,15 @@ def _account_name_key_from_connection_string(connection_string: str) -> tuple[st
         segment = segment.strip()
         if not segment or "=" not in segment:
             continue
-        key, value = segment.split("=", 1)
-        parts[key.strip()] = value.strip()
-    name = parts.get("AccountName")
-    key = parts.get("AccountKey")
-    if not name or not key:
+        seg_key, value = segment.split("=", 1)
+        parts[seg_key.strip()] = value.strip()
+    account_name = parts.get("AccountName")
+    account_key = parts.get("AccountKey")
+    if not account_name or not account_key:
         raise ValueError(
             "Azure connection string must include AccountName and AccountKey for SAS URL generation."
         )
-    return name, key
+    return account_name, account_key
 
 
 class AzureBlobStorageProvider(PresignedObjectUrlsMixin):
@@ -73,7 +73,7 @@ class AzureBlobStorageProvider(PresignedObjectUrlsMixin):
 
     def get_bytes(self, key: str) -> bytes:
         blob = self._container_client.get_blob_client(key)
-        return blob.download_blob().readall()
+        return cast(bytes, blob.download_blob().readall())
 
     def delete(self, key: str) -> bool:
         blob = self._container_client.get_blob_client(key)
@@ -123,4 +123,4 @@ class AzureBlobStorageProvider(PresignedObjectUrlsMixin):
             clean = key.strip().lstrip("/")
             return f"{self._public_base_url}/{clean}"
         blob = self._container_client.get_blob_client(key)
-        return blob.url
+        return cast(str, blob.url)

@@ -87,7 +87,7 @@ class GcpSecretManagerSecretProvider:
 
     def get(self, key: str) -> str | None:
         try:
-            from google.cloud import secretmanager  # type: ignore[import-not-found]
+            from google.cloud import secretmanager
         except ImportError as exc:  # pragma: no cover - optional dependency
             raise ImportError(
                 "Install google-cloud-secret-manager to use GcpSecretManagerSecretProvider: "

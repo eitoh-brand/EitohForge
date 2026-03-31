@@ -19,6 +19,13 @@ BLOCKED_LICENSE_TOKENS = (
     "sspl",
 )
 
+# Transitive dependencies that sometimes report ``UNKNOWN`` in pip-licenses JSON even though the
+# upstream project publishes an SPDX license (manual review; keep this list tiny).
+UNKNOWN_LICENSE_ALLOWLIST: dict[str, str] = {
+    # Google CRC32C extension; Apache-2.0 per PyPI metadata; pip-licenses may still show UNKNOWN.
+    "google-crc32c": "Apache-2.0 (allowlisted; pip-licenses UNKNOWN)",
+}
+
 def _variant_mentions_blocked_token(variant: str, token: str) -> bool:
     """
     Return True if `variant` should be considered blocked by `token`.
@@ -84,6 +91,8 @@ def main() -> int:
         license_name = str(item.get("License", "UNKNOWN"))
         normalized = license_name.strip().lower()
         if normalized in {"", "unknown"}:
+            if name in UNKNOWN_LICENSE_ALLOWLIST:
+                continue
             unknown.append(name)
             continue
         if _is_blocked_license(license_name):

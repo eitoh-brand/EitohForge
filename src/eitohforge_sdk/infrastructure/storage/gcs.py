@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib
 from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 
 from eitohforge_sdk.infrastructure.storage.contracts import StorageObject
 from eitohforge_sdk.infrastructure.storage.presigned_urls import PresignedObjectUrlsMixin
@@ -43,7 +43,7 @@ class GcsStorageProvider(PresignedObjectUrlsMixin):
 
     def get_bytes(self, key: str) -> bytes:
         blob = self._bucket.blob(key)
-        return blob.download_as_bytes()
+        return cast(bytes, blob.download_as_bytes())
 
     def delete(self, key: str) -> bool:
         blob = self._bucket.blob(key)

@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-
+from typing import Any, cast
 from fastapi import FastAPI
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.types import ASGIApp
 
 
 @dataclass(frozen=True)
@@ -48,14 +49,16 @@ def register_api_contract_middleware(
 class _ApiContractEnvelopeMiddleware(BaseHTTPMiddleware):
     def __init__(
         self,
-        app: object,
+        app: ASGIApp,
         *,
         enforce_rule: ApiContractRule,
     ) -> None:
         super().__init__(app)
         self._rule = enforce_rule
 
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         response = await call_next(request)
         if response.status_code == 204:
             return response
@@ -67,7 +70,8 @@ class _ApiContractEnvelopeMiddleware(BaseHTTPMiddleware):
             return response
 
         body = b""
-        async for chunk in response.body_iterator:
+        body_iterator = cast(Any, response).body_iterator
+        async for chunk in body_iterator:
             body += chunk
 
         try:

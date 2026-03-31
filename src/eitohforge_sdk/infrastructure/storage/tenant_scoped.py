@@ -74,7 +74,7 @@ class TenantScopedStorageProvider(PresignedObjectUrlsMixin):
         if not hasattr(delegate, "generate_public_url"):
             raise TypeError("Underlying storage provider does not support public object URLs.")
         gen = getattr(delegate, "generate_public_url")
-        return gen(self._namespaced_key(key))
+        return cast(str, gen(self._namespaced_key(key)))
 
     def _as_presignable_delegate(self) -> PresignableStorageProvider:
         delegate = self.delegate

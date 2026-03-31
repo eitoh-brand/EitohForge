@@ -87,17 +87,17 @@ def matches_condition(row: dict[str, Any], condition: FilterCondition) -> bool:
     op = condition.operator
     val = condition.value
     if op == FilterOperator.EQ:
-        return column == val
+        return bool(column == val)
     if op == FilterOperator.NE:
-        return column != val
+        return bool(column != val)
     if op == FilterOperator.GT:
-        return column > val
+        return bool(column > val)
     if op == FilterOperator.GTE:
-        return column >= val
+        return bool(column >= val)
     if op == FilterOperator.LT:
-        return column < val
+        return bool(column < val)
     if op == FilterOperator.LTE:
-        return column <= val
+        return bool(column <= val)
     if op == FilterOperator.CONTAINS:
         return val in str(column)
     if op == FilterOperator.STARTSWITH:
@@ -106,15 +106,15 @@ def matches_condition(row: dict[str, Any], condition: FilterCondition) -> bool:
         return str(column).endswith(str(val))
     if op == FilterOperator.BETWEEN:
         if isinstance(val, Sequence) and not isinstance(val, (str, bytes)) and len(val) == 2:
-            return val[0] <= column <= val[1]
+            return bool(val[0] <= column <= val[1])
         return False
     if op == FilterOperator.IN:
         if isinstance(val, Sequence) and not isinstance(val, (str, bytes)):
-            return column in tuple(val)
+            return bool(column in tuple(val))
         return False
     if op == FilterOperator.NOT_IN:
         if isinstance(val, Sequence) and not isinstance(val, (str, bytes)):
-            return column not in tuple(val)
+            return bool(column not in tuple(val))
         return False
     if op == FilterOperator.EXISTS:
         if bool(val):

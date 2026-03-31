@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from eitohforge_sdk.core.abac import AccessPolicy, PolicyContext
+from eitohforge_sdk.core.abac import PolicyContext
 
 from .ast import And, Binary, Expr, Literal, Or, Ref, Unary
 from .evaluate import PolicyEvaluationError, eval_expr
@@ -26,8 +26,8 @@ class ExpressionAccessPolicy:
         return cls(name=name, expression=parse_expr(source))
 
 
-def expression_policy(name: str, source: str) -> AccessPolicy:
-    """Build an :class:`AccessPolicy` from a DSL string (registered name + source)."""
+def expression_policy(name: str, source: str) -> ExpressionAccessPolicy:
+    """Build an :class:`ExpressionAccessPolicy` from a DSL string (registered name + source)."""
     return ExpressionAccessPolicy.from_source(name, source)
 
 

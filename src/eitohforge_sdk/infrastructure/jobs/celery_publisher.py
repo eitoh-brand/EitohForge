@@ -6,7 +6,7 @@ import importlib
 import inspect
 import json
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Coroutine, cast
 from uuid import uuid4
 
 from eitohforge_sdk.infrastructure.jobs.contracts import JobEnvelope, JobHandler, JobPublisher
@@ -34,7 +34,7 @@ class CeleryJobPublisher(JobPublisher):
     def _create_dispatch_task(self) -> Any:
         handlers = self._handlers
 
-        @self._app.task(name="eitohforge_sdk.celery_dispatch", ignore_result=True)
+        @self._app.task(name="eitohforge_sdk.celery_dispatch", ignore_result=True)  # type: ignore[untyped-decorator]
         def dispatch_job(job_name: str, job_id: str, payload_json: str, metadata_json: str) -> None:
             raw = json.loads(payload_json)
             meta = json.loads(metadata_json)
@@ -51,7 +51,8 @@ class CeleryJobPublisher(JobPublisher):
             if inspect.isawaitable(maybe):
                 import asyncio
 
-                asyncio.run(maybe)
+                coro = cast(Coroutine[Any, Any, None], maybe)
+                asyncio.run(coro)
 
         return dispatch_job
 

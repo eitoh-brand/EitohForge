@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Callable, Sequence
-from typing import Any, Generic, TypeVar
+from collections.abc import Awaitable, Callable, Sequence
+from typing import Any, Generic, TypeVar, cast
 from uuid import uuid4
 
 from eitohforge_sdk.application.dto.repository import (
@@ -56,16 +56,28 @@ class RedisJsonRepository(Generic[TEntity, TCreate, TUpdate], RepositoryContract
     def _row_key(self, entity_id: str) -> str:
         return f"{self._key_prefix}:row:{entity_id}"
 
+    @staticmethod
+    def _json_loads(raw: str | bytes) -> Any:
+        if isinstance(raw, bytes):
+            return json.loads(raw.decode("utf-8", errors="replace"))
+        return json.loads(raw)
+
     def _load_all_rows(self) -> dict[str, dict[str, Any]]:
-        ids = self._client.smembers(self._ids_key)
+        ids_raw = self._client.smembers(self._ids_key)
+        if isinstance(ids_raw, Awaitable):
+            raise TypeError("RedisJsonRepository requires a synchronous redis client.")
+        ids = cast(set[str], ids_raw)
         out: dict[str, dict[str, Any]] = {}
         for raw_id in ids or ():
             eid = str(raw_id)
             raw = self._client.get(self._row_key(eid))
             if raw is None:
                 continue
+            if isinstance(raw, Awaitable):
+                raise TypeError("RedisJsonRepository requires a synchronous redis client.")
+            raw_s = cast(str | bytes, raw)
             try:
-                row = json.loads(raw)
+                row = self._json_loads(raw_s)
             except json.JSONDecodeError:
                 continue
             if isinstance(row, dict):
@@ -86,8 +98,10 @@ class RedisJsonRepository(Generic[TEntity, TCreate, TUpdate], RepositoryContract
         raw = self._client.get(self._row_key(entity_id))
         if raw is None:
             return None
+        if isinstance(raw, Awaitable):
+            raise TypeError("RedisJsonRepository requires a synchronous redis client.")
         try:
-            row = json.loads(raw)
+            row = self._json_loads(cast(str | bytes, raw))
         except json.JSONDecodeError:
             return None
         if not isinstance(row, dict) or not rh.row_in_tenant_scope(row, context):
@@ -100,8 +114,10 @@ class RedisJsonRepository(Generic[TEntity, TCreate, TUpdate], RepositoryContract
         raw = self._client.get(self._row_key(entity_id))
         if raw is None:
             return None
+        if isinstance(raw, Awaitable):
+            raise TypeError("RedisJsonRepository requires a synchronous redis client.")
         try:
-            row = json.loads(raw)
+            row = self._json_loads(cast(str | bytes, raw))
         except json.JSONDecodeError:
             return None
         if not isinstance(row, dict) or not rh.row_in_tenant_scope(row, context):
@@ -116,8 +132,10 @@ class RedisJsonRepository(Generic[TEntity, TCreate, TUpdate], RepositoryContract
         raw = self._client.get(self._row_key(entity_id))
         if raw is None:
             return False
+        if isinstance(raw, Awaitable):
+            raise TypeError("RedisJsonRepository requires a synchronous redis client.")
         try:
-            row = json.loads(raw)
+            row = self._json_loads(cast(str | bytes, raw))
         except json.JSONDecodeError:
             return False
         if not isinstance(row, dict) or not rh.row_in_tenant_scope(row, context):

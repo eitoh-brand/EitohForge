@@ -169,7 +169,7 @@ class PolicyEnforcedStorageProvider:
     def generate_presigned_download(self, key: str, *, expires_in: int) -> str:
         self._authorize(StorageAction.PRESIGN_GET, key, {"expires_in": expires_in})
         delegate = self._as_presignable_delegate()
-        return delegate.generate_presigned_download(key, expires_in=expires_in)
+        return delegate.generate_presigned_get_url(key, expires_in=expires_in)
 
     def generate_presigned_upload(
         self, key: str, *, expires_in: int, content_type: str | None = None
@@ -180,7 +180,7 @@ class PolicyEnforcedStorageProvider:
             {"expires_in": expires_in, "content_type": content_type},
         )
         delegate = self._as_presignable_delegate()
-        return delegate.generate_presigned_upload(
+        return delegate.generate_presigned_put_url(
             key, expires_in=expires_in, content_type=content_type
         )
 
@@ -189,7 +189,7 @@ class PolicyEnforcedStorageProvider:
         delegate = self._delegate
         if not hasattr(delegate, "generate_public_url"):
             raise TypeError("Underlying storage provider does not support public object URLs.")
-        return delegate.generate_public_url(key)
+        return cast(str, delegate.generate_public_url(key))
 
     def _authorize(self, action: StorageAction, key: str, metadata: Mapping[str, Any] | None = None) -> None:
         request = StorageAccessRequest(
