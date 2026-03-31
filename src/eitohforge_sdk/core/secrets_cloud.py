@@ -26,13 +26,19 @@ class AwsSecretsManagerSecretProvider:
 
         client = boto3.client("secretsmanager", region_name=self.region_name)
         try:
-            resp = client.get_secret_value(SecretId=key)
+            resp: dict[str, object] = client.get_secret_value(SecretId=key)
         except ClientError:
             return None
-        if "SecretString" in resp and resp["SecretString"]:
-            return str(resp["SecretString"])
-        if "SecretBinary" in resp and resp["SecretBinary"]:
-            return resp["SecretBinary"].decode("utf-8", errors="replace")
+        secret_string = resp.get("SecretString")
+        if isinstance(secret_string, str) and secret_string:
+            return secret_string
+        if secret_string not in (None, ""):
+            return str(secret_string)
+        secret_binary = resp.get("SecretBinary")
+        if isinstance(secret_binary, (bytes, bytearray)) and secret_binary:
+            return secret_binary.decode("utf-8", errors="replace")
+        if secret_binary not in (None, b""):
+            return str(secret_binary)
         return None
 
 

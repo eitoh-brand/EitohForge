@@ -3,7 +3,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/eitohforge.svg)](https://pypi.org/project/eitohforge/)
 [![Python versions](https://img.shields.io/pypi/pyversions/eitohforge.svg)](https://pypi.org/project/eitohforge/)
 [![Build](https://github.com/eitoh-brand/EitohForge/actions/workflows/ci.yml/badge.svg)](https://github.com/eitoh-brand/EitohForge/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/license-Proprietary-informational.svg)](https://github.com/eitoh-brand/EitohForge)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/eitoh-brand/EitohForge)
 
 EitohForge is an enterprise backend toolkit for Python/FastAPI that ships as one PyPI package:
 

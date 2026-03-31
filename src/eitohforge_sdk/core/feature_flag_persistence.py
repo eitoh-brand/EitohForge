@@ -25,7 +25,12 @@ def load_definitions_from_redis_json(
     raw = client.get(key)
     if not raw:
         return []
-    data = json.loads(raw)
+    # Stubs may describe this as Awaitable[Any] | Any; normalize to str.
+    if isinstance(raw, (bytes, bytearray)):
+        raw_str: str = raw.decode("utf-8", errors="replace")
+    else:
+        raw_str = str(raw)
+    data = json.loads(raw_str)
     if not isinstance(data, list):
         raise ValueError("Redis feature flag payload must be a JSON array.")
     return [_row_to_definition(row) for row in data]
