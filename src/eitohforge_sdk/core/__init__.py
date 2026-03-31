@@ -77,6 +77,10 @@ from eitohforge_sdk.core.forge_toggles import (
 )
 from eitohforge_sdk.core.error_middleware import register_error_handlers
 from eitohforge_sdk.core.error_registry import ErrorDefinition, ErrorRegistry, build_default_error_registry
+from eitohforge_sdk.core.feature_flag_persistence import (
+    load_definitions_from_redis_json,
+    save_definitions_to_redis_json,
+)
 from eitohforge_sdk.core.feature_flags import (
     FeatureFlagDefinition,
     FeatureFlagService,
@@ -138,6 +142,7 @@ from eitohforge_sdk.core.tenant import (
     register_tenant_context_middleware,
 )
 from eitohforge_sdk.core.plugins import PluginModule, PluginRegistry
+from eitohforge_sdk.core.policy_registry import PolicyRegistry
 
 __all__ = [
     "ApiVersion",
@@ -160,6 +165,9 @@ __all__ = [
     "FeatureFlagDefinition",
     "FeatureFlagTargetingContext",
     "FeatureFlagService",
+    "load_definitions_from_redis_json",
+    "save_definitions_to_redis_json",
+    "PolicyRegistry",
     "InMemoryRefreshTokenStore",
     "InMemorySessionStore",
     "InMemorySsoLinkStore",

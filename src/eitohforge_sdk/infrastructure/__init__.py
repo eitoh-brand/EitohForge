@@ -1,5 +1,6 @@
 """Infrastructure layer modules."""
 
+from eitohforge_sdk.infrastructure.engine_registry import EngineRegistry
 from eitohforge_sdk.infrastructure.cache import (
     AdvancedCacheProvider,
     CacheEntry,
@@ -82,6 +83,8 @@ from eitohforge_sdk.infrastructure.storage import (
     build_storage_provider,
 )
 from eitohforge_sdk.infrastructure.webhooks import (
+    register_inbound_webhook_router,
+    verify_body_hmac_hex,
     WebhookDeadLetterRecord,
     WebhookDeliveryResult,
     WebhookDispatcher,
@@ -95,6 +98,7 @@ from eitohforge_sdk.infrastructure.webhooks import (
 )
 
 __all__ = [
+    "EngineRegistry",
     "CacheEntry",
     "CacheProvider",
     "AdvancedCacheProvider",
@@ -165,6 +169,8 @@ __all__ = [
     "PolicyEnforcedStorageProvider",
     "S3StorageProvider",
     "build_storage_provider",
+    "register_inbound_webhook_router",
+    "verify_body_hmac_hex",
     "WebhookEvent",
     "WebhookEndpointConfig",
     "WebhookRequest",

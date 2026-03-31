@@ -107,6 +107,18 @@ def test_create_crud_generates_module_scaffold() -> None:
         assert "test_orders_service_crud_cycle" in generated_test_content
 
 
+def test_create_provider_generates_stub() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(app, ["create", "project", "my_service"])
+        assert result.exit_code == 0
+        prov = runner.invoke(app, ["create", "provider", "email_sendgrid", "--path", "my_service"])
+        assert prov.exit_code == 0
+        target = Path("my_service/app/providers/email_sendgrid.py")
+        assert target.exists()
+        assert "configure" in target.read_text(encoding="utf-8")
+
+
 def test_create_pseudocode_generates_guide_file() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():

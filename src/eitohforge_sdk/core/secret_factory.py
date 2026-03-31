@@ -11,6 +11,10 @@ from eitohforge_sdk.core.secrets import (
     UnconfiguredSecretProvider,
     VaultSecretProvider,
 )
+from eitohforge_sdk.core.secrets_cloud import (
+    AwsSecretsManagerSecretProvider,
+    AzureKeyVaultSecretProvider,
+)
 
 
 def build_secret_provider(settings: AppSettings) -> SecretProvider:
@@ -25,5 +29,10 @@ def build_secret_provider(settings: AppSettings) -> SecretProvider:
             vault_mount=settings.secrets.vault_mount,
             token=token,
         )
+    if provider_name == "aws":
+        region = settings.secrets.aws_region or os.environ.get("AWS_DEFAULT_REGION") or "us-east-1"
+        return AwsSecretsManagerSecretProvider(region_name=region)
+    if provider_name == "azure":
+        return AzureKeyVaultSecretProvider(vault_url=settings.secrets.azure_vault_url or "")
     return UnconfiguredSecretProvider(provider_name=provider_name)
 

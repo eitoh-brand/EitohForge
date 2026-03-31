@@ -11,6 +11,7 @@ from eitohforge_sdk.infrastructure.notifications.gateway import (
     InMemoryNotificationGateway,
     success_result_for,
 )
+from eitohforge_sdk.infrastructure.notifications.sendgrid import build_sendgrid_email_sender
 from eitohforge_sdk.infrastructure.notifications.template_engine import (
     NotificationTemplate,
     NotificationTemplateEngine,
@@ -26,6 +27,7 @@ __all__ = [
     "NotificationResult",
     "NotificationSender",
     "InMemoryNotificationGateway",
+    "build_sendgrid_email_sender",
     "success_result_for",
     "NotificationTemplate",
     "RenderedNotificationTemplate",

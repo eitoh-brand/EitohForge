@@ -1,5 +1,6 @@
 """Application DTO models."""
 
+from eitohforge_sdk.application.dto.envelope import err, ok, paginated
 from eitohforge_sdk.application.dto.error import ApiError, ApiErrorDetail, ApiErrorResponse
 from eitohforge_sdk.application.dto.repository import (
     AuditMetadata,
@@ -23,6 +24,9 @@ __all__ = [
     "ApiError",
     "ApiErrorDetail",
     "ApiErrorResponse",
+    "err",
+    "ok",
+    "paginated",
     "ApiResponse",
     "ApiResponseMeta",
     "AuditMetadata",

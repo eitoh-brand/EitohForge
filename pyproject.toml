@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "eitohforge"
-version = "0.1.5"
+version = "0.1.6"
 description = "Enterprise backend SDK and CLI for FastAPI systems."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -39,6 +39,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+aws = [
+  "boto3>=1.35.0",
+]
 dev = [
   "pytest>=8.3.0",
   "pytest-cov>=6.2.0",

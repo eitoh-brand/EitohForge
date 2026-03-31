@@ -186,3 +186,42 @@ document rotation policy and fallback
     output_path.write_text(content, encoding="utf-8")
     typer.echo(f"Pseudocode guide generated at: {output_path}")
 
+
+@create_app.command("provider")
+def create_provider_stub(
+    provider_name: str = typer.Argument(..., help="Provider module name (e.g. email_sendgrid, vault_custom)."),
+    path: Path = typer.Option(Path("."), "--path", help="Target project directory."),
+) -> None:
+    """Scaffold a provider module stub under ``app/providers/`` for integrations."""
+    _validate_module_name(provider_name)
+    project_dir = path.resolve()
+    if not project_dir.exists():
+        raise typer.BadParameter(f"Project path does not exist: {project_dir}")
+    app_dir = project_dir / "app"
+    if not app_dir.exists():
+        raise typer.BadParameter(f"Not a generated project (missing app/): {project_dir}")
+    providers_dir = app_dir / "providers"
+    target = providers_dir / f"{provider_name}.py"
+    if target.exists():
+        raise typer.BadParameter(f"Provider already exists: {target}")
+    providers_dir.mkdir(parents=True, exist_ok=True)
+    init_file = providers_dir / "__init__.py"
+    if not init_file.exists():
+        init_file.write_text('"""Integration providers."""\n', encoding="utf-8")
+    content = f'''"""Provider stub: {provider_name}.
+
+Wire this from app composition (e.g. ``app/main.py``) or DI container.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+
+def configure() -> dict[str, Any]:
+    """Return provider-specific configuration for your integration."""
+    return {{"name": "{provider_name}"}}
+'''
+    target.write_text(content, encoding="utf-8")
+    typer.echo(f"Provider stub created at: {target}")
+

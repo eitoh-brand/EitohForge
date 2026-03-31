@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 import hashlib
+from typing import Any
 
 from fastapi import APIRouter, FastAPI, Request
 
@@ -21,6 +23,49 @@ class FeatureFlagDefinition:
     tenant_allowlist: tuple[str, ...] = ()
     starts_at: datetime | None = None
     ends_at: datetime | None = None
+
+    @classmethod
+    def from_mapping(cls, data: dict[str, Any]) -> FeatureFlagDefinition:
+        """Build a definition from JSON-serializable mapping (Redis/DB persistence)."""
+        starts_at = _parse_dt(data.get("starts_at"))
+        ends_at = _parse_dt(data.get("ends_at"))
+        actor_allowlist = data.get("actor_allowlist") or ()
+        tenant_allowlist = data.get("tenant_allowlist") or ()
+        if isinstance(actor_allowlist, list):
+            actor_allowlist = tuple(str(x) for x in actor_allowlist)
+        if isinstance(tenant_allowlist, list):
+            tenant_allowlist = tuple(str(x) for x in tenant_allowlist)
+        return cls(
+            key=str(data["key"]),
+            enabled=bool(data.get("enabled", True)),
+            rollout_percentage=int(data.get("rollout_percentage", 100)),
+            actor_allowlist=tuple(actor_allowlist),
+            tenant_allowlist=tuple(tenant_allowlist),
+            starts_at=starts_at,
+            ends_at=ends_at,
+        )
+
+    def to_mapping(self) -> dict[str, Any]:
+        """Serialize to JSON-friendly dict."""
+        return {
+            "key": self.key,
+            "enabled": self.enabled,
+            "rollout_percentage": self.rollout_percentage,
+            "actor_allowlist": list(self.actor_allowlist),
+            "tenant_allowlist": list(self.tenant_allowlist),
+            "starts_at": self.starts_at.isoformat() if self.starts_at else None,
+            "ends_at": self.ends_at.isoformat() if self.ends_at else None,
+        }
+
+
+def _parse_dt(value: object) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return None
 
 
 @dataclass(frozen=True)
@@ -43,6 +88,12 @@ class FeatureFlagService:
         if not key:
             raise ValueError("Feature flag key is required.")
         self.flags[key] = definition
+
+    def reload(self, definitions: Iterable[FeatureFlagDefinition]) -> None:
+        """Replace all definitions (used after loading from Redis/DB)."""
+        self.flags.clear()
+        for definition in definitions:
+            self.register(definition)
 
     def evaluate(
         self, key: str, *, context: FeatureFlagTargetingContext | None = None

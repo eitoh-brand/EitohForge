@@ -77,7 +77,7 @@ Key groups:
 | Feature flags | `EITOHFORGE_FEATURE_FLAGS_` | endpoint path, enable |
 | Security hardening | `EITOHFORGE_SECURITY_HARDENING_` | hosts, max body, headers |
 | Observability | `EITOHFORGE_OBSERVABILITY_` | request logging/metrics/tracing; optional Prometheus `/metrics` + OTEL OTLP traces. |
-| Secret management | `EITOHFORGE_SECRET_` | secret provider selection (`env` / `vault` / `aws` / `azure`). Vault reads KV values on each `get` (no client-side caching), so rotations are picked up naturally; Vault token comes from `VAULT_TOKEN` (or `EITOHFORGE_SECRET_VAULT_TOKEN` fallback). |
+| Secret management | `EITOHFORGE_SECRET_` | secret provider selection (`env` / `vault` / `aws` / `azure`). **Vault:** KV reads via `VAULT_TOKEN` (or `EITOHFORGE_SECRET_VAULT_TOKEN`). **AWS:** install `boto3` (`pip install 'eitohforge[aws]'`); uses `EITOHFORGE_SECRET_AWS_REGION` / `AWS_DEFAULT_REGION`. **Azure Key Vault:** set `EITOHFORGE_SECRET_AZURE_VAULT_URL` and `AZURE_KEY_VAULT_TOKEN` (AAD bearer for `https://vault.azure.net/.default`). |
 
 Capability discovery for clients:
 

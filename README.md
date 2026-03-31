@@ -1,5 +1,10 @@
 # EitohForge
 
+[![PyPI version](https://img.shields.io/pypi/v/eitohforge.svg)](https://pypi.org/project/eitohforge/)
+[![Python versions](https://img.shields.io/pypi/pyversions/eitohforge.svg)](https://pypi.org/project/eitohforge/)
+[![Build](https://github.com/eitoh-brand/EitohForge/actions/workflows/ci.yml/badge.svg)](https://github.com/eitoh-brand/EitohForge/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Proprietary-informational.svg)](https://github.com/eitoh-brand/EitohForge)
+
 EitohForge is an enterprise backend toolkit for Python/FastAPI that ships as one PyPI package:
 
 - **SDK**: `eitohforge_sdk` (middleware, auth, tenanting, observability, infra contracts/adapters)
@@ -24,6 +29,43 @@ This README is intentionally **long-form for PyPI** and covers features, module 
 - Everything else is still **`EITOHFORGE_*`** (no separate CLI toggle yet): **cache**, **storage**, **search**, **secrets** (Vault/AWS/Azure), **webhooks**, **jobs**, **notifications**, **messaging** — see [Configuration and Environment Variables](#configuration-and-environment-variables) and [Feature Coverage](#feature-coverage-and-module-by-module-usage)
 - Promote by stage: local/dev/staging/prod (UAT usually maps operationally to `staging`)
 - Scale topology when ready: multi-port local apps (`eitohforge dev`), multi-instance deploys, optional multi-DB/realtime fanout
+
+---
+
+
+## Hello World (SDK in 30 seconds)
+
+This is the smallest possible FastAPI app that uses `eitohforge_sdk` to expose `/sdk/capabilities` and health endpoints. Docs are FastAPI defaults: `/docs`, `/redoc`, `/openapi.json`.
+
+```python
+from fastapi import FastAPI
+
+from eitohforge_sdk.core.capabilities import register_capabilities_endpoint
+from eitohforge_sdk.core.config import get_settings
+from eitohforge_sdk.core.health import register_health_endpoints
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(title="hello-eitohforge")
+    register_capabilities_endpoint(app, settings_provider=get_settings)
+    register_health_endpoints(app, settings_provider=get_settings)
+    return app
+
+
+app = create_app()
+```
+
+Run:
+
+```bash
+uvicorn app:app --reload
+```
+
+Then open:
+
+- `GET /health`, `/ready`, `/status`
+- `/sdk/capabilities`
+- `/docs`, `/redoc`, `/openapi.json`
 
 ---
 
@@ -57,6 +99,8 @@ This README is intentionally **long-form for PyPI** and covers features, module 
 - [Configuration and Environment Variables](#configuration-and-environment-variables)
 - [Examples](#examples)
 - [Deployment Blueprints (end-to-end)](#deployment-blueprints-end-to-end)
+- [Roadmap (high-level)](#roadmap-high-level)
+- [Platform primitives (ecosystem gaps)](#platform-primitives-ecosystem-gaps)
 - [Appendix: Full Feature & Operations Reference](#appendix-full-feature--operations-reference)
 - [Documentation (multi-page)](#documentation-multi-page)
 - [License](#license)
@@ -1130,6 +1174,24 @@ EITOHFORGE_TENANT_DB_SCHEMA_NAME_TEMPLATE={tenant_id}
 - enable request signing for write-critical APIs
 - enable rate limit + idempotency on mutating routes
 - avoid plaintext secrets in repo; use secret manager/CI secrets
+
+---
+
+## Platform primitives (ecosystem gaps)
+
+These modules address common “framework maturity” gaps: contracts, persistence, providers, and inbound integrations.
+
+| Area | What to use |
+|------|-------------|
+| **Repository contract** | `eitohforge_sdk.domain.BaseRepository` / `RepositoryContract` — `SQLAlchemyRepository` is the reference implementation. |
+| **Response envelopes** | `eitohforge_sdk.application.dto.ok`, `paginated`, `err` — thin helpers over `ApiResponse` / `PaginatedApiResponse` / `ApiErrorResponse`. |
+| **Feature flags + Redis** | `FeatureFlagDefinition.to_mapping` / `from_mapping`, `FeatureFlagService.reload`, `load_definitions_from_redis_json` / `save_definitions_to_redis_json`. |
+| **Secrets** | `EITOHFORGE_SECRET_PROVIDER=env|vault|aws|azure` — Vault (`VaultSecretProvider`), AWS Secrets Manager (`pip install 'eitohforge[aws]'` + `boto3`), Azure Key Vault REST (`AZURE_KEY_VAULT_TOKEN` + `EITOHFORGE_SECRET_AZURE_VAULT_URL`). |
+| **Inbound webhooks** | `register_inbound_webhook_router` — HMAC verification (timestamp-canonical or plain body digest). |
+| **SendGrid email** | `build_sendgrid_email_sender` + `InMemoryNotificationGateway.register_sender("email", sender)`. |
+| **Policy registry** | `PolicyRegistry` — register named `AccessPolicy` instances for composition and future DSL hooks. |
+| **Multi-engine DB routing** | `EngineRegistry` — named SQLAlchemy engines; for logical roles + `DatabaseProvider`, see `infrastructure.database.registry.DatabaseRegistry`. |
+| **CLI provider stub** | `eitohforge create provider <name> --path .` — scaffolds `app/providers/<name>.py`. |
 
 ---
 
