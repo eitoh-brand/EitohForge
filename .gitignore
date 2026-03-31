@@ -9,5 +9,6 @@ venv/
 dist/
 build/
 .DS_Store
+.coverage
 .env
 .env.local

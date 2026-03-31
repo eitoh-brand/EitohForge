@@ -7,38 +7,50 @@ EitohForge is an enterprise backend toolkit for Python/FastAPI that ships as one
 
 This README is intentionally **long-form for PyPI** and covers features, module usage, and integration options.
 
+### How to read this README
+
+- **Main sections** (through [Deployment Blueprints](#deployment-blueprints-end-to-end)) follow a single path: run the API → project layout → **feature toggling** (including REST/WebSocket effects) → data & environments → scaling & CLI reference → SDK depth → infra blueprints.
+- **[Appendix](#appendix-full-feature--operations-reference)** inlines the same topics as `docs/guides/` for offline / single-file PyPI reading — **intentional**, not accidental duplication.
+- Use the [table of contents](#table-of-contents) or [PyPI quick navigation](#pypi-quick-navigation) to jump; skip the appendix unless you want the full inlined reference.
+
 ---
 
 ## Gist (1 minute)
 
 - Install: `pip install eitohforge` (or `pipx install eitohforge` for CLI isolation)
-- Scaffold: `eitohforge create project my_service`
-- Run generated app: `uvicorn app.main:app --reload`
-- Discover runtime contracts: `GET /sdk/capabilities`
-- Core stack: auth (JWT/session/SSO), rate limit, idempotency, request signing, audit, tenant isolation, observability, realtime, storage/cache/search/webhooks/jobs/contracts
+- Scaffold + run REST API: `eitohforge create project my_service` -> `uvicorn app.main:app --reload`
+- Validate baseline routes: `GET /health`, `/ready`, `/status`, `/sdk/capabilities`; **interactive API docs (FastAPI)**: `/docs` (Swagger UI), `/redoc` (ReDoc), `GET /openapi.json` (OpenAPI schema)
+- Enable platform layers via env (CLI shortcut: `eitohforge config feature-set <name> --enabled true|false --env-file .env`): **security_hardening**, **audit**, **observability**, **jwt**, **https_redirect**, **idempotency**, **rate_limit**, **request_signing**, **tenant**, **feature_flags** (HTTP endpoint), **realtime**, **realtime_jwt** (socket handshake), **multi_db_analytics**, **multi_db_search** — run `eitohforge config feature-list` for the full key → `EITOHFORGE_*` map
+- Everything else is still **`EITOHFORGE_*`** (no separate CLI toggle yet): **cache**, **storage**, **search**, **secrets** (Vault/AWS/Azure), **webhooks**, **jobs**, **notifications**, **messaging** — see [Configuration and Environment Variables](#configuration-and-environment-variables) and [Feature Coverage](#feature-coverage-and-module-by-module-usage)
+- Promote by stage: local/dev/staging/prod (UAT usually maps operationally to `staging`)
+- Scale topology when ready: multi-port local apps (`eitohforge dev`), multi-instance deploys, optional multi-DB/realtime fanout
 
 ---
 
 
 ## PyPI Quick Navigation
 
-- **Quick Start**: [create → run → check endpoints](#quick-start)
-- **Feature enable/disable**: [profiles + env toggles + code toggles](#feature-enabledisable-strategy)
-- **Multi-port / multi-instance**: [local + production scaling notes](#multi-port-and-multi-instance-patterns)
-- **DB selection**: [Postgres/MySQL/SQLite examples](#database-selection-and-connectivity)
-- **Multi-environment usage**: [local/dev/staging/prod env examples](#multi-environment-usage-localdevstagingprod)
-- **Sockets (WebSocket) usage**: [auth modes + message contracts + scaling](#7-realtime-websocket-jwt--rooms--direct-messaging)
-- **Deployment Blueprints**: [single node, HA, Kubernetes](#deployment-blueprints-end-to-end)
+- **Step 1 — Run REST API (SDK standard)**: [Quick start](#quick-start)
+- **Step 2 — Project layout**: [folders/files and why](#project-architecture-foldersfiles-and-why)
+- **Step 3 — Feature toggling (env + code + what appears on the wire)**: [Feature enable/disable](#feature-enabledisable-strategy) — includes REST/WebSocket and middleware tables in the same section
+- **Step 4 — Data & environments**: [Database](#database-selection-and-connectivity), [multi-environment](#multi-environment-usage-localdevstagingprod)
+- **Step 5 — Scale & multi-app**: [multi-port / multi-instance](#multi-port-and-multi-instance-patterns)
+- **CLI reference**: [all `eitohforge` commands](#cli-usage-complete)
+- **Deployment blueprints**: [single node, HA, Kubernetes](#deployment-blueprints-end-to-end)
 - **Full reference appendix**: [inline docs + architecture spec](#appendix-full-feature--operations-reference)
+- **Realtime/WebSocket deep dive**: [auth modes + message contracts + scaling](#7-realtime-websocket-jwt--rooms--direct-messaging)
+
 ## Table of Contents
 
+- [How to read this README](#how-to-read-this-readme)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
-- [CLI Usage (complete)](#cli-usage-complete)
-- [Feature Enable/Disable Strategy](#feature-enabledisable-strategy)
-- [Multi-Port and Multi-Instance Patterns](#multi-port-and-multi-instance-patterns)
+- [Project Architecture (folders/files and why)](#project-architecture-foldersfiles-and-why)
+- [Feature Enable/Disable Strategy](#feature-enabledisable-strategy) (includes REST/WebSocket vs toggles)
 - [Database Selection and Connectivity](#database-selection-and-connectivity)
 - [Multi-Environment Usage (local/dev/staging/prod)](#multi-environment-usage-localdevstagingprod)
+- [Multi-Port and Multi-Instance Patterns](#multi-port-and-multi-instance-patterns)
+- [CLI Usage (complete)](#cli-usage-complete)
 - [SDK Usage (complete)](#sdk-usage-complete)
 - [Feature Coverage and Module-by-Module Usage](#feature-coverage-and-module-by-module-usage)
 - [Third-Party Support Matrix](#third-party-support-matrix)
@@ -130,87 +142,70 @@ uvicorn app.main:app --reload
 - `GET /ready`
 - `GET /status`
 - `GET /sdk/capabilities`
+- **OpenAPI / Swagger (FastAPI built-ins)** — not separate EitohForge toggles; enabled unless you turn them off on `FastAPI(...)`:
+  - **`GET /docs`** — Swagger UI (try requests in the browser)
+  - **`GET /redoc`** — ReDoc (alternate layout)
+  - **`GET /openapi.json`** — machine-readable OpenAPI 3 schema (for codegen, gateways, CI)
+
+In **production**, disable or protect public docs: pass `docs_url=None`, `redoc_url=None`, and/or `openapi_url=None` to `FastAPI(...)`, or put the app behind an ingress that blocks `/docs` unless authenticated.
 
 ---
 
-## CLI Usage (complete)
+## Project Architecture (folders/files and why)
 
-### `eitohforge --help`
+This repo ships both a reusable SDK and an operator-focused CLI. The structure is intentionally split so runtime framework code, scaffold generation code, docs, and tests evolve independently.
 
-Top-level command groups:
+### Root folders
 
-- `version`
-- `create`
-- `db`
-- `dev`
+| Path | Why it exists |
+|------|----------------|
+| `src/eitohforge_sdk/` | Runtime SDK used by generated apps: middleware, settings, infra contracts/adapters, realtime, observability, security layers. |
+| `src/eitohforge_cli/` | CLI for scaffolding and operations (`create`, `db`, `dev`, plus helper groups). |
+| `docs/guides/` | Multi-page operational docs (usage, profiles, websocket, runbook, cookbook). |
+| `docs/releases/` | Human-readable release notes by version. |
+| `examples/` | Working sample projects for minimal and enterprise patterns. |
+| `tests/unit/` | Unit tests for SDK and CLI behavior. |
+| `scripts/` | Project automation helpers (build/release/support scripts). |
+| `dist/` | Built wheel/sdist artifacts (generated for release checks). |
 
-Current CLI intentionally focuses on scaffolding and operations. Feature toggling itself is runtime/config driven
-(`EITOHFORGE_*` env vars and optional `ForgePlatformToggles`), not a separate `enable/disable` CLI command.
+### Core SDK package map (`src/eitohforge_sdk/`)
 
-### `eitohforge version`
+| Path | Why needed |
+|------|------------|
+| `core/config.py` | Typed `AppSettings` (`EITOHFORGE_*`) and environment behavior resolution. |
+| `core/forge_application.py` | `build_forge_app(...)` composition root wiring middleware + routes from settings/toggles. |
+| `core/forge_toggles.py` | Code-level per-layer overrides (`ForgePlatformToggles`) for deterministic composition. |
+| `core/health.py` | `/health`, `/ready`, `/status` endpoints. |
+| `core/capabilities.py` | `/sdk/capabilities` runtime contract and feature introspection output. |
+| `core/feature_flags.py` | Feature-flag endpoint wiring and service abstractions. |
+| `core/*` middleware modules | Cross-cutting concerns: auth, tenant, idempotency, rate limit, signing, observability, audit. |
+| `infrastructure/repositories/sqlalchemy_repository.py` | Generic repository implementation on SQLAlchemy with query spec support. |
+| `infrastructure/sockets/` | WebSocket transport (`/realtime/ws`), auth extraction, optional Redis fan-out bridge. |
+| `infrastructure/*` (cache/storage/search/webhooks/jobs/...) | Provider adapters and integration primitives for platform capabilities. |
 
-Prints installed package version (from distribution metadata).
+### CLI package map (`src/eitohforge_cli/`)
 
-### `eitohforge create`
+| Path | Why needed |
+|------|------------|
+| `main.py` | Typer root command registration and entrypoint. |
+| `commands/create.py` | Project and CRUD scaffold generation. |
+| `commands/db.py` | Alembic wrapper commands for migration workflows. |
+| `commands/dev.py` | Multi-service local startup from `forge.dev.json`. |
+| `commands/config.py` | Env group discovery and profile env template output. |
+| `commands/docs.py` | Fast lookup of docs topics and canonical file paths. |
+| `templates.py` + `template_parts/*.py` | Source-of-truth scaffold templates split by concern (core/security/storage/cache/etc.). |
 
-#### Create project
+### Why this split matters
 
-```bash
-eitohforge create project my_service --path . --mode sdk --profile standard
-```
-
-#### Create CRUD module
-
-```bash
-eitohforge create crud orders --path ./my_service
-```
-
-### `eitohforge db`
-
-Alembic helper commands for generated projects:
-
-```bash
-eitohforge db init --path .
-eitohforge db migrate -m "add orders table" --path .
-eitohforge db upgrade --revision head --path .
-eitohforge db downgrade --revision -1 --path .
-eitohforge db current --path .
-```
-
-### `eitohforge dev`
-
-Runs multiple uvicorn services from `forge.dev.json`.
-
-```bash
-eitohforge dev --path .
-eitohforge dev validate --path .
-```
-
-Example `forge.dev.json`:
-
-```json
-{
-  "schema_version": 1,
-  "default_host": "127.0.0.1",
-  "services": [
-    {
-      "name": "api",
-      "module": "app.main:app",
-      "port": 8000
-    },
-    {
-      "name": "worker-api",
-      "module": "worker_app.main:app",
-      "port": 8100,
-      "working_directory": "."
-    }
-  ]
-}
-```
+- `eitohforge_sdk` can be versioned and consumed independently of scaffold templates.
+- CLI scaffolding remains composable: template modules map directly to generated project areas.
+- Docs and tests stay close to behavior and release notes, making upgrades auditable.
 
 ---
 
 ## Feature Enable/Disable Strategy
+
+**One place for toggles:** environment flags and `ForgePlatformToggles` decide which **HTTP routes**, **WebSocket** endpoints, and **middleware** are active. The tables under [What toggling affects on the wire](#what-toggling-affects-on-the-wire-rest--websocket) are part of this same topic — not a separate “REST API chapter.”
 
 There are three practical layers:
 
@@ -229,8 +224,15 @@ EITOHFORGE_OBSERVABILITY_ENABLED=true
 EITOHFORGE_OBSERVABILITY_ENABLE_PROMETHEUS=true
 EITOHFORGE_OBSERVABILITY_OTEL_ENABLED=true
 EITOHFORGE_REALTIME_ENABLED=true
+EITOHFORGE_REALTIME_REQUIRE_ACCESS_JWT=true
+EITOHFORGE_AUTH_JWT_ENABLED=true
+EITOHFORGE_RUNTIME_ENFORCE_HTTPS_REDIRECT=true
 EITOHFORGE_TENANT_ENABLED=true
+EITOHFORGE_DB_ANALYTICS_ENABLED=true
+EITOHFORGE_DB_SEARCH_ENABLED=true
 ```
+
+For TLS certificate pinning: apply at API gateway/client transport layer (outside SDK runtime flags), then document rotation policy in your platform runbook.
 
 3) **Code-level toggles for controlled rollout** (`ForgePlatformToggles`)  
 Useful when you want deterministic app composition per deployment stage.
@@ -254,41 +256,49 @@ app = build_forge_app(
 )
 ```
 
----
+### What toggling affects on the wire (REST & WebSocket)
 
-## Multi-Port and Multi-Instance Patterns
+`build_forge_app(ForgeAppBuildConfig(...))` registers platform routes and middleware. **`ForgeAppBuildConfig.wire_platform_middleware=False`** builds a minimal FastAPI app (CORS + optional HTTPS redirect only) — **no** health/capabilities/feature-flags/realtime routers and **no** platform middleware stack.
 
-### Local multi-port development
+| Surface | Method / path | Primary controls | If disabled or not mounted |
+|---------|----------------|------------------|----------------------------|
+| Health | `GET /health`, `/ready`, `/status` | `wire_health_family`; `ForgePlatformToggles.health`; `settings`-driven layers for readiness | **404** on those paths |
+| Capabilities | `GET /sdk/capabilities` | `wire_capabilities`; `toggles.capabilities` | **404** |
+| Feature flags | `GET` + `EITOHFORGE_FEATURE_FLAGS_ENDPOINT_PATH` (default `/sdk/feature-flags`) | `EITOHFORGE_FEATURE_FLAGS_ENABLED`; `wire_feature_flags`; `toggles.feature_flags` | **404** (endpoint not registered when `FEATURE_FLAGS_ENABLED=false`) |
+| Prometheus | `GET` + `EITOHFORGE_OBSERVABILITY_PROMETHEUS_METRICS_PATH` (default `/metrics`) | `EITOHFORGE_OBSERVABILITY_ENABLED`; `EITOHFORGE_OBSERVABILITY_ENABLE_PROMETHEUS`; `toggles.observability` | **404** |
+| Realtime | `WebSocket /realtime/ws` | `EITOHFORGE_REALTIME_ENABLED`; `wire_realtime_websocket`; `toggles.realtime_websocket`; Redis URL for cross-worker fan-out | **404** or failed upgrade; hub features off when `REALTIME_ENABLED=false` |
 
-Use `eitohforge dev` with `forge.dev.json` to run several FastAPI services at once (different ports, optional
-working directories and env overrides).
+`/sdk/capabilities` JSON includes pointers such as `feature_flags.endpoint_path` so clients can discover the exact feature-flag URL.
 
-```bash
-eitohforge dev validate --path .
-eitohforge dev --path .
-```
+### OpenAPI / Swagger UI (interactive HTTP docs)
 
-### Horizontal multi-instance deployment
+These come from **FastAPI** on the generated `app` object (defaults apply unless you override `FastAPI(...)`):
 
-EitohForge apps are stateless by design at the HTTP layer and can run as multiple instances behind a load balancer.
-For shared behavior across instances:
+| Path | Purpose |
+|------|---------|
+| `GET /docs` | Swagger UI — interactive “try it” browser for REST routes |
+| `GET /redoc` | ReDoc — alternate API reference UI |
+| `GET /openapi.json` | OpenAPI 3 schema (SDK clients, codegen, API gateways) |
 
-- **Session/cache**: use Redis provider
-- **Realtime socket fanout/direct messaging**: set `EITOHFORGE_REALTIME_REDIS_URL`
-- **Idempotency/rate-limit/replay semantics**: prefer shared backing stores for strict cross-instance behavior
+They are **not** controlled by `EITOHFORGE_*` unless your `app.main` passes custom `docs_url` / `redoc_url` / `openapi_url`. For production hardening, disable or restrict these paths (see [Quick start — check endpoints](#4-check-endpoints)).
 
-Example production launch styles:
+`eitohforge ops check` also probes `GET /openapi.json` to confirm the schema is served.
 
-```bash
-# Single process dev-like
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+### Middleware-only toggles (HTTP outcomes)
 
-# Multi-worker single node
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
-```
+These layers are toggled the same way as above (`EITOHFORGE_*` + optional `ForgePlatformToggles`); they do **not** add separate “feature CRUD” routes — they change behavior on matching requests:
 
-In clustered/container environments, run multiple pods/instances behind your ingress/LB and keep Redis/Postgres as
-shared stateful services.
+| Layer | Key settings | Typical client-visible outcome |
+|-------|----------------|--------------------------------|
+| Security hardening | `EITOHFORGE_SECURITY_HARDENING_*` | **400** (body/hosts) / rejected requests |
+| Request signing | `EITOHFORGE_REQUEST_SIGNING_*` (headers configurable) | **401** / **403** when signature invalid or missing |
+| Rate limit | `EITOHFORGE_RATE_LIMIT_*` | **429** when exceeded |
+| Idempotency | `EITOHFORGE_IDEMPOTENCY_*` + idempotency header (default `Idempotency-Key`) | **Replay**: same stored **status + body** + `X-Idempotent-Replay: true`; **409** if the same key is reused with a different payload |
+| Tenant isolation | `EITOHFORGE_TENANT_*` | **400** / **403** when tenant missing or not allowed |
+| Audit | `EITOHFORGE_AUDIT_*` | No dedicated status; writes audit records |
+| Observability | `EITOHFORGE_OBSERVABILITY_*` | Request IDs / tracing headers per config; no error by default |
+
+`ForgePlatformToggles` fields (`security_hardening`, `audit`, `observability`, …) override `AppSettings.*.enabled` per layer when you need code-level on/off regardless of env files.
 
 ---
 
@@ -403,6 +413,200 @@ EITOHFORGE_OBSERVABILITY_ENABLE_PROMETHEUS=true
 - `dev`: integration behavior close to prod, relaxed blast radius
 - `staging`: pre-prod with production-like data shape/traffic simulation
 - `prod`: strict security, observability, controlled rollout and autoscaling
+
+### New deployment targets (UAT, staging, custom)
+
+Two different meanings of “new environment”:
+
+| What you want | Code change? | What to do |
+|---------------|--------------|------------|
+| **New operational target** (e.g. a UAT cluster, namespace, or CI stage) | **No** | Provision infra + secrets; set `EITOHFORGE_*` per target (often a dedicated secret store entry or `.env.uat`). Keep `EITOHFORGE_APP_ENV` as one of the **built-in** values: `local`, `dev`, `staging`, `prod`. Many teams map **UAT → `staging`** so posture stays “pre-prod-like” without a new enum. |
+| **New first-class label** (e.g. `EITOHFORGE_APP_ENV=uat` as its own value) | **Yes** | Extend `app_env` in `AppSettings` (and generated templates), update `resolve_environment_behavior()` and any validators that branch on `app_env`. This is a small SDK/template change — not something you can turn on from env alone. |
+
+**Practical recipe (no code change):** create `uat` (or any name) as a **deployment name** in K8s/Helm/CI; wire its ConfigMap/secret to `EITOHFORGE_APP_ENV=staging` (or `dev`) and set DB/cache URLs for that cluster. The **runtime** only sees the four built-in env values.
+
+See also `docs/guides/usage-complete.md` → **Environments (`EITOHFORGE_APP_ENV`)**.
+
+---
+
+## Multi-Port and Multi-Instance Patterns
+
+### Local multi-port development
+
+Use `eitohforge dev` with `forge.dev.json` to run several FastAPI services at once (different ports, optional
+working directories and env overrides).
+
+```bash
+eitohforge dev validate --path .
+eitohforge dev --path .
+```
+
+### Horizontal multi-instance deployment
+
+EitohForge apps are stateless by design at the HTTP layer and can run as multiple instances behind a load balancer.
+For shared behavior across instances:
+
+- **Session/cache**: use Redis provider
+- **Realtime socket fanout/direct messaging**: set `EITOHFORGE_REALTIME_REDIS_URL`
+- **Idempotency/rate-limit/replay semantics**: prefer shared backing stores for strict cross-instance behavior
+
+Example production launch styles:
+
+```bash
+# Single process dev-like
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# Multi-worker single node
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+```
+
+In clustered/container environments, run multiple pods/instances behind your ingress/LB and keep Redis/Postgres as
+shared stateful services.
+
+---
+
+## CLI Usage (complete)
+
+### `eitohforge --help`
+
+Top-level command groups:
+
+- `version`
+- `create`
+- `db`
+- `dev`
+- `config`
+- `docs`
+- `ops`
+- `feature-flags`
+- `doctor`
+
+Use `eitohforge config feature-set` to write `EITOHFORGE_*` flags into an env file; that complements the [Feature Enable/Disable Strategy](#feature-enabledisable-strategy) section above.
+
+### `eitohforge version`
+
+Prints installed package version (from distribution metadata).
+
+### `eitohforge create`
+
+#### Create project
+
+```bash
+eitohforge create project my_service --path . --mode sdk --profile standard
+```
+
+#### Create CRUD module
+
+```bash
+eitohforge create crud orders --path ./my_service
+```
+
+#### Generate implementation pseudocode
+
+```bash
+eitohforge create pseudocode --path ./my_service
+```
+
+### `eitohforge db`
+
+Alembic helper commands for generated projects:
+
+```bash
+eitohforge db init --path .
+eitohforge db migrate -m "add orders table" --path .
+eitohforge db upgrade --revision head --path .
+eitohforge db downgrade --revision -1 --path .
+eitohforge db current --path .
+```
+
+### `eitohforge dev`
+
+Runs multiple uvicorn services from `forge.dev.json`.
+
+```bash
+eitohforge dev --path .
+eitohforge dev validate --path .
+```
+
+Example `forge.dev.json`:
+
+```json
+{
+  "schema_version": 1,
+  "default_host": "127.0.0.1",
+  "services": [
+    {
+      "name": "api",
+      "module": "app.main:app",
+      "port": 8000
+    },
+    {
+      "name": "worker-api",
+      "module": "worker_app.main:app",
+      "port": 8100,
+      "working_directory": "."
+    }
+  ]
+}
+```
+
+### `eitohforge config`
+
+Configuration helpers for environment management:
+
+```bash
+eitohforge config env-groups
+eitohforge config env-template --profile local
+eitohforge config env-template --profile staging
+eitohforge config feature-list
+eitohforge config feature-set jwt --enabled true --env-file .env
+eitohforge config feature-set realtime --enabled true --env-file .env
+eitohforge config feature-set realtime_jwt --enabled true --env-file .env
+eitohforge config feature-set https_redirect --enabled true --env-file .env
+eitohforge config feature-set multi_db_analytics --enabled true --env-file .env
+eitohforge config feature-set rate_limit --enabled true --env-file .env
+eitohforge config feature-set request_signing --enabled false --env-file .env
+```
+
+### `eitohforge docs`
+
+Documentation discovery helpers:
+
+```bash
+eitohforge docs list
+eitohforge docs path usage
+eitohforge docs path architecture
+```
+
+### `eitohforge ops`
+
+Runtime endpoint checks against a deployed or local service:
+
+```bash
+eitohforge ops check --base-url http://127.0.0.1:8000
+eitohforge ops smoke --base-url http://127.0.0.1:8000 --max-latency-ms 500
+```
+
+Checks `GET /health`, `/ready`, `/status`, `/sdk/capabilities`, and `GET /openapi.json` (prints a one-line OpenAPI summary; use `/docs` and `/redoc` in the browser for interactive docs).
+
+### `eitohforge feature-flags`
+
+Inspect the running feature flags endpoint:
+
+```bash
+eitohforge feature-flags get --base-url http://127.0.0.1:8000
+# custom path:
+eitohforge feature-flags get --base-url https://api.example.com --path /sdk/feature-flags
+```
+
+### `eitohforge doctor`
+
+Sanity-check generated project structure:
+
+```bash
+eitohforge doctor check --path .
+eitohforge doctor check --path . --file forge.dev.json
+```
 
 ---
 

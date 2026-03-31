@@ -82,6 +82,7 @@ Key groups:
 Capability discovery for clients:
 
 - `GET /sdk/capabilities` — enabled features and header names.
+- **OpenAPI / Swagger (FastAPI defaults)** — `GET /docs` (Swagger UI), `GET /redoc` (ReDoc), `GET /openapi.json` (schema). Not `EITOHFORGE_*`-controlled unless you override `FastAPI(docs_url=..., redoc_url=..., openapi_url=...)`. In production, disable or protect these paths.
 - `GET /sdk/feature-flags` — evaluated flags for the current request context.
 - **WebSocket** — generated apps expose `/realtime/ws` when `EITOHFORGE_REALTIME_ENABLED=true` (JWT handshake, rooms, broadcast). See `docs/guides/realtime-websocket.md`.
 
